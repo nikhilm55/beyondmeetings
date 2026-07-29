@@ -8,11 +8,14 @@ from __future__ import annotations
 
 import argparse
 import sys
+import webbrowser
 from datetime import datetime
 from pathlib import Path
 
 from .audio.pipewire import PipeWireRecorder
-from .config import load_config
+from .config import DEFAULT_CONFIG_PATH, load_config
+from .doctor.base import completion_percent, run_all
+from .doctor.registry import build_checks
 from .llm.anthropic import AnthropicProvider
 from .pipeline import generate_notes
 from .secrets import get_secret
@@ -21,6 +24,17 @@ from .transcribe.groq import GroqTranscriber, compress_for_upload
 
 def placeholder_name() -> str:
     return datetime.now().strftime("recording-%H-%M")
+
+
+def format_doctor_report(rows: list[dict]) -> str:
+    lines = [f"beyondMeetings — {completion_percent(rows)}% ready", ""]
+    for row in rows:
+        mark = "✓" if row["status"] == "ok" else "✗"
+        suffix = "" if row["required"] else "  (optional)"
+        lines.append(f"  {mark} {row['label']}{suffix}")
+        if row["detail"]:
+            lines.append(f"      {row['detail']}")
+    return "\n".join(lines)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -34,6 +48,12 @@ def build_parser() -> argparse.ArgumentParser:
 
     notes = sub.add_parser("notes", help="regenerate notes from a transcript")
     notes.add_argument("transcript")
+
+    sub.add_parser("doctor", help="check prerequisites")
+
+    setup = sub.add_parser("setup", help="open the setup wizard")
+    setup.add_argument("--port", type=int, default=7788)
+    setup.add_argument("--no-browser", action="store_true")
 
     return parser
 
@@ -93,6 +113,28 @@ def main(argv: list[str] | None = None) -> int:
         transcript = Path(args.transcript).read_text(encoding="utf-8")
         path = generate_notes(transcript, config, _provider(config))
         print(f"Note written: {path}")
+        return 0
+
+    if args.command == "doctor":
+        rows = run_all(build_checks(config, config_path=DEFAULT_CONFIG_PATH))
+        print(format_doctor_report(rows))
+        return 0 if completion_percent(rows) == 100 else 1
+
+    if args.command == "setup":
+        import uvicorn
+
+        from .server import create_app
+
+        url = f"http://127.0.0.1:{args.port}/setup"
+        print(f"Setup wizard: {url}")
+        if not args.no_browser:
+            webbrowser.open(url)
+        uvicorn.run(
+            create_app(config_path=DEFAULT_CONFIG_PATH),
+            host="127.0.0.1",
+            port=args.port,
+            log_level="warning",
+        )
         return 0
 
     return 1
