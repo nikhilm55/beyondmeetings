@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>beyondMeetings — Setup</title>
+  <link rel="stylesheet" href="/setup.css">
+</head>
+<body>
+  <main>
+    <header class="hero">
+      <div class="ring" id="ring"><span id="pct">0%</span></div>
+      <div class="heroText">
+        <h1>beyondMeetings</h1>
+        <p class="sub" id="summary">Checking your system…</p>
+        <button id="fixall" class="btn primary" hidden>Fix everything I can</button>
+      </div>
+    </header>
+
+    <section class="rows" id="rows" aria-live="polite"></section>
+
+    <footer class="done" id="done" hidden>
+      <h2>You're ready.</h2>
+      <p>Start a meeting from the terminal:</p>
+      <code>beyondmeetings start "My meeting"</code>
+    </footer>
+  </main>
+  <script src="/setup.js"></script>
+</body>
+</html>
