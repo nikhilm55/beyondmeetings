@@ -39,6 +39,7 @@ These were settled during design. Reopening them wastes a session.
 | Transcription | **Groq default, whisper.cpp opt-in** | Groq is fast + free tier; local option for privacy |
 | Note target | **Obsidian required** | Task Board / Home.md dashboards are Obsidian-flavoured |
 | Distribution | **`curl \| bash` bootstrap** | One README line; script stays short and auditable |
+| Python bootstrap | **Prefer system Python ≥3.10, fall back to `uv`** | The real failures are a missing `python3-venv` (very common on Ubuntu/Debian → `ensurepip is not available`) and too-old Pythons on LTS distros (Ubuntu 20.04 = 3.8, RHEL 8 = 3.6), not an absent Python. `uv` is one static binary that brings its own CPython and clears all three at once. Probe venv by *attempting* one, not by parsing a version string |
 | Rules files | `CLAUDE.md` + `AGENTS.md` + `GEMINI.md`, **generated from one template**, marked *do not edit* | The existing `~/meetings/AGENTS.md` already drifted months stale from `CLAUDE.md` — proof that duplicated prose rots |
 | Rules file content | **Thin driver** over the CLI, not full pipeline prose | Two engines would disagree; behaviour belongs in Python |
 | Secrets | **OS keyring**, `0600` file fallback | Never a shell env var |
@@ -129,7 +130,11 @@ Findings 1–3 were caught by running the pipeline end-to-end and *reading the o
 - [ ] `web/` — checklist UI, % ring, per-row Fix buttons, in-place input panels
 - [ ] `rules.py` + single template → `CLAUDE.md` / `AGENTS.md` / `GEMINI.md`
 - [ ] Obsidian install via flatpak (Flathub)
-- [ ] `install.sh` — Python check, venv, symlink `~/.local/bin`, launch wizard
+- [ ] `install.sh` — environment bootstrap, symlink `~/.local/bin`, launch wizard
+  - [ ] Probe system Python: version ≥3.10 **and** a venv that actually creates (don't trust the version string — `python3-venv` can be missing on a modern Python)
+  - [ ] Fall back to `uv` when the probe fails; announce the download before fetching it
+  - [ ] `--no-uv` flag: print the distro-specific fix (`sudo apt install python3-venv`, …) and exit
+  - [ ] Test the three failure modes: no `python3`, Python 3.9, Python 3.12 without `python3-venv`
 - [ ] `cli.py doctor` — same check objects as the wizard
 - [ ] `README.md` (with screenshot), `LICENSE`, `CONTRIBUTING.md`
 - [ ] Tests: ring percentage, fix dispatch, rules-file generation

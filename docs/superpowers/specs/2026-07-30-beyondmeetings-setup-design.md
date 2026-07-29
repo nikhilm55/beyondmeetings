@@ -234,7 +234,25 @@ The tray icon gives one-click Start/Stop without opening the page, and reflects 
 curl -fsSL https://raw.githubusercontent.com/<user>/beyondmeetings/main/install.sh | bash
 ```
 
-The script checks for Python ≥3.10, creates an isolated venv under `~/.local/share/beyondmeetings`, installs the package, symlinks `beyondmeetings` into `~/.local/bin`, and opens the wizard in the browser. It stays short and readable so a cautious user can audit it first. `CONTRIBUTING.md` documents the `git clone && ./install.sh` path.
+The script creates an isolated environment under `~/.local/share/beyondmeetings`, installs the package, symlinks `beyondmeetings` into `~/.local/bin`, and opens the wizard in the browser. It stays short and readable so a cautious user can audit it first. `CONTRIBUTING.md` documents the `git clone && ./install.sh` path.
+
+### Python bootstrap
+
+The wizard is served by the Python app itself, so there is no way to show a graphical installer before Python exists. The bootstrap is unavoidably terminal-level; the UI begins at step two.
+
+"No Python at all" is the rare case. Three failures actually matter, in order of likelihood:
+
+| Failure | Where it bites | Symptom |
+|---|---|---|
+| `python3-venv` not installed | Ubuntu/Debian, very common | `ensurepip is not available` |
+| Python older than 3.10 | Ubuntu 20.04 (3.8), Debian 11 (3.9), RHEL 8 (3.6) | version check fails |
+| No `python3` on `PATH` | rare on desktops | `command not found` |
+
+**Strategy: prefer system Python, fall back to `uv`.** The script probes for Python ≥3.10 *and* a working `venv` (by actually attempting one, not by parsing a version string — the venv package can be missing on a perfectly modern Python). If that succeeds, it is used directly and nothing is downloaded. If any check fails, the script bootstraps [`uv`](https://github.com/astral-sh/uv) — a single static binary with no dependencies that installs its own standalone CPython — and builds the environment with that instead. This clears all three failures at once, including on distros where no package-manager command can reach 3.10.
+
+The fallback is announced before it downloads anything, and `--no-uv` skips it in favour of printing the distro-specific fix (`sudo apt install python3-venv`, etc.) for users who would rather not fetch a binary.
+
+All runtime dependencies (pydantic, httpx, keyring, tomli-w) are pure-Python or ship manylinux wheels, so a compiler is never required.
 
 Config: `~/.config/beyondmeetings/config.toml`. Secrets: OS keyring.
 
