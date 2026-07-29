@@ -59,7 +59,10 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "stop":
         recorder = PipeWireRecorder(data_dir, segment_minutes=config.segment_minutes)
-        state = recorder.stop()
+        try:
+            state = recorder.stop()
+        except RuntimeError as exc:
+            raise SystemExit(f"Nothing to stop — {exc}.") from exc
 
         key = get_secret("groq_api_key")
         if not key:
