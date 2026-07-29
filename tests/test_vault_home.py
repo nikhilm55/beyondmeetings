@@ -78,3 +78,22 @@ def test_touch_updated_rewrites_frontmatter_date():
 def test_missing_recent_callout_raises():
     with pytest.raises(ValueError):
         add_recent_meeting("# Home\n", REF, "T", "P", "d")
+
+
+def test_first_meeting_into_an_empty_recent_callout(tmp_path):
+    """Regression: the scaffolded Recent callout is the final line."""
+    from beyondmeetings.vault.scaffold import scaffold_vault
+
+    scaffold_vault(tmp_path)
+    text = (tmp_path / "Home.md").read_text()
+    out = add_recent_meeting(text, REF, "Phase 4 — Plan", "Acme", "First one")
+    assert "> [!example]+ Recent\n> **[[Meetings/2026-07-30/Phase 4 - Plan" in out
+
+
+def test_sync_counters_preserves_the_blank_line_after_the_header(tmp_path):
+    from beyondmeetings.vault.scaffold import scaffold_vault
+
+    scaffold_vault(tmp_path)
+    text = (tmp_path / "Home.md").read_text()
+    out = sync_counters(text, pending=3)
+    assert "> [!todo]+ Pending — 3\n>\n> → [[Tasks/Task Board|See all tasks]]" in out

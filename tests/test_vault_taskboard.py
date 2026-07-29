@@ -79,3 +79,24 @@ def test_update_counters_rewrites_both_places():
 def test_add_tasks_raises_when_pending_callout_missing():
     with pytest.raises(ValueError):
         add_tasks("# Empty board\n", [ActionItem(task="A")], REF, "d")
+
+
+def test_blank_line_after_header_is_preserved(tmp_path):
+    """Regression: \\s*$ under MULTILINE matched the following blank line."""
+    from beyondmeetings.vault.scaffold import scaffold_vault
+
+    scaffold_vault(tmp_path)
+    board = (tmp_path / "Tasks" / "Task Board.md").read_text()
+    out = add_tasks(board, [ActionItem(task="A")], REF, "d")
+    assert "> >\n\n> [!success]- Done — 0" in out
+
+
+def test_insertion_into_an_empty_pending_callout_keeps_later_sections(tmp_path):
+    from beyondmeetings.vault.scaffold import scaffold_vault
+
+    scaffold_vault(tmp_path)
+    board = (tmp_path / "Tasks" / "Task Board.md").read_text()
+    out = add_tasks(board, [ActionItem(task="A")], REF, "d")
+    assert "> [!success]- Done — 0" in out
+    assert "> [!danger]+ Blocked — 0" in out
+    assert out.count("**==A==**") == 1

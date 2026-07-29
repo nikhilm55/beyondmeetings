@@ -10,8 +10,10 @@ import re
 from ..models import MeetingRef
 from .paths import meeting_wikilink
 
-RECENT_HEADER = re.compile(r"^> \[!example\]\+ Recent\s*$", re.MULTILINE)
-PENDING_HEADER = re.compile(r"^> \[!todo\]\+ Pending — (\d+)\s*$", re.MULTILINE)
+# [ \t]* rather than \s* — under MULTILINE, \s* matches newlines and would
+# swallow a blank line that follows the header.
+RECENT_HEADER = re.compile(r"^> \[!example\]\+ Recent[ \t]*$", re.MULTILINE)
+PENDING_HEADER = re.compile(r"^> \[!todo\]\+ Pending — (\d+)[ \t]*$", re.MULTILINE)
 GLANCE_PENDING = re.compile(r"`(\d+) pending`")
 UPDATED = re.compile(r"^updated: .*$", re.MULTILINE)
 
