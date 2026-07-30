@@ -66,8 +66,10 @@ You also need:
 
 - **ffmpeg** — the installer offers to install it
 - **Obsidian** — the installer offers to install it from Flathub
-- A **Groq API key** for transcription (free tier is ample)
-- An API key for whichever model writes your notes
+- A **Groq API key** for transcription (free tier is ample), *or* local
+  whisper.cpp
+- A way to write notes — **your existing Claude/ChatGPT/Gemini subscription
+  is enough**, see below
 
 Run `beyondmeetings doctor` at any time to see what is missing.
 
@@ -75,16 +77,35 @@ Run `beyondmeetings doctor` at any time to see what is missing.
 
 ## Choosing your AI
 
-| Provider | Default model | Notes |
+**You do not need an API key.** If you already have a Claude, ChatGPT or
+Gemini subscription with its CLI installed, beyondMeetings drives that — your
+subscription does the work, and nothing is billed per token.
+
+### No API key needed
+
+| Provider | Needs | Notes |
 |---|---|---|
-| **Claude** | `claude-opus-5` | Recommended. Best summary quality and follow-up detection. |
-| **ChatGPT** | `gpt-4o` | Uses native JSON mode. |
-| **Gemini** | `gemini-2.0-flash` | Uses native JSON mode. |
-| **Ollama** | `qwen2.5:14b` | Fully local, no API key, nothing leaves your machine. Weaker on code-mixed speech (e.g. Hinglish) than the hosted models. |
+| **Claude Code** | `claude` installed and signed in | **Recommended.** Best summary quality and follow-up detection. |
+| **Codex CLI** | `codex` installed and signed in | Uses your ChatGPT subscription. |
+| **Gemini CLI** | `gemini` installed and signed in | Uses your Google account. |
+| **Ollama** | `ollama serve` + a pulled model | Fully local; nothing leaves your machine. Weaker on code-mixed speech (e.g. Hinglish). |
+
+### API key required
+
+These need a key **with credits**, which is separate from a subscription — a
+Claude Pro plan does not come with API credits.
+
+| Provider | Default model |
+|---|---|
+| Claude API | `claude-opus-5` |
+| ChatGPT API | `gpt-4o` |
+| Gemini API | `gemini-2.0-flash` |
 
 Pick yours in the setup wizard. To use a different model, set `model` in
 `~/.config/beyondmeetings/config.toml` — model names change faster than this
-project releases, so the defaults are a starting point, not a constraint.
+project releases, so the defaults are a starting point, not a constraint. If an
+agent CLI needs a different invocation, set `agent_command` rather than
+patching the code.
 
 Whichever you choose, the *files* are identical — the notes, task board and
 dashboard are written by deterministic Python, not by the model. The model
@@ -112,6 +133,9 @@ downloads the model (~1.5 GB) for you.
 By default your audio is sent to Groq for transcription, and the transcript is
 sent to your chosen model provider. Nothing else leaves your machine, and
 nothing is stored by beyondMeetings anywhere but your own disk.
+
+Note that an agent CLI still sends the transcript to that provider — "no API
+key" means no billing, not local-only.
 
 For a fully local setup, choose **whisper.cpp** for transcription and
 **Ollama** for notes. Then no audio and no transcript ever leaves the machine.

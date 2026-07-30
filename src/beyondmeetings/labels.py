@@ -10,9 +10,15 @@ TRANSCRIBERS = {
 }
 
 PROVIDERS = {
-    "anthropic": "Claude",
-    "openai": "ChatGPT",
-    "gemini": "Gemini",
+    # No API key — these drive an already-installed CLI on the user's
+    # existing subscription.
+    "claude-cli": "Claude Code",
+    "gemini-cli": "Gemini CLI",
+    "codex-cli": "Codex CLI",
+    # API key required.
+    "anthropic": "Claude API",
+    "openai": "ChatGPT API",
+    "gemini": "Gemini API",
     "ollama": "Ollama",
 }
 

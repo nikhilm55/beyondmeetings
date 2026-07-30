@@ -7,12 +7,13 @@ regex cannot catch a revoked or wrong-account key.
 from __future__ import annotations
 
 import re
+import shutil
 from pathlib import Path
 
 import httpx
 
 from ..labels import provider_label
-from ..secrets import get_secret, last_store, set_secret
+from ..secrets import get_secret, secret_location, set_secret
 from .base import Check, CheckResult, InputField
 
 TIMEOUT = 20.0
@@ -120,13 +121,47 @@ def validate_ollama(host: str, model: str) -> tuple[bool, str]:
     return True, ""
 
 
-# Ollama is keyless and handled separately in ProviderKeyCheck.
+def validate_agent_cli(provider: str, command: list[str] | None = None) -> tuple[bool, str]:
+    """Is the CLI installed and logged in?
+
+    Verified with a one-token round trip rather than `--version`, because an
+    installed-but-unauthenticated CLI is the failure that actually happens.
+    """
+    from ..llm.agent_cli import AgentCliError, AgentCliProvider, agent_binary
+
+    binary = (command or [agent_binary(provider)])[0]
+    if not shutil.which(binary):
+        return False, (
+            f"{binary} is not installed. Install it, or pick a provider that "
+            "uses an API key."
+        )
+
+    probe = AgentCliProvider(provider, command=command)
+    try:
+        probe.analyse('Reply with only this JSON: {"title": "ping", '
+                      '"date": "2026-01-01", "executive_summary": "ping"}')
+    except AgentCliError as exc:
+        return False, str(exc)
+    except Exception as exc:
+        # It answered but not with our schema — that is fine for a liveness probe.
+        if "could not read a meeting note" in str(exc):
+            return True, ""
+        return False, str(exc)
+    return True, ""
+
+
+# Ollama and the agent CLIs are keyless; both are handled separately below.
 VALIDATORS = {
     "anthropic": validate_anthropic_key,
     "openai": validate_openai_key,
     "gemini": validate_gemini_key,
     "ollama": None,
+    "claude-cli": None,
+    "gemini-cli": None,
+    "codex-cli": None,
 }
+
+KEYLESS = {"ollama", "claude-cli", "gemini-cli", "codex-cli"}
 
 
 class _KeyCheck(Check):
@@ -147,7 +182,7 @@ class _KeyCheck(Check):
             where = {
                 "keyring": "stored in your OS keyring",
                 "file": "stored in a 0600 file — no OS keyring was available",
-            }.get(last_store(), "stored")
+            }.get(secret_location(self.secret_name, self.secret_dir), "stored")
             return CheckResult(
                 status="ok", detail=f"Key verified with a live call, {where}."
             )
@@ -192,6 +227,7 @@ class ProviderKeyCheck(_KeyCheck):
         secret_dir: Path | None = None,
         ollama_host: str = "http://localhost:11434",
         model: str = "",
+        agent_command: list[str] | None = None,
     ):
         if provider not in VALIDATORS:
             raise ValueError(f"unknown provider: {provider}")
@@ -200,8 +236,15 @@ class ProviderKeyCheck(_KeyCheck):
         self.secret_name = f"{provider}_api_key"
         self.ollama_host = ollama_host
         self.model = model
+        self.agent_command = agent_command
 
-        if provider == "ollama":
+        if provider.endswith("-cli"):
+            self.label = f"{provider_label(provider)} sign-in"
+            self.description = (
+                "Uses your existing subscription. No API key and no credits needed."
+            )
+            self.inputs = []
+        elif provider == "ollama":
             self.label = "Ollama (local)"
             self.description = "Runs on your machine. No API key needed."
             self.inputs = []
@@ -222,6 +265,15 @@ class ProviderKeyCheck(_KeyCheck):
         return self.model or DEFAULT_MODEL
 
     def detect(self) -> CheckResult:
+        if self.provider.endswith("-cli"):
+            ok, detail = validate_agent_cli(self.provider, self.agent_command)
+            if ok:
+                return CheckResult(
+                    status="ok",
+                    detail=f"{provider_label(self.provider)} is installed and signed in.",
+                )
+            return CheckResult(status="missing", detail=detail)
+
         if self.provider == "ollama":
             ok, detail = validate_ollama(self.ollama_host, self._ollama_model())
             if ok:
@@ -233,9 +285,9 @@ class ProviderKeyCheck(_KeyCheck):
 
     @property
     def fixable(self) -> bool:
-        # Nothing to fix from here for Ollama — the user must start the daemon
-        # or pull the model themselves.
-        return self.provider != "ollama"
+        # Keyless providers have nothing for the wizard to fix — the user must
+        # install, sign in, start a daemon or pull a model themselves.
+        return self.provider not in KEYLESS
 
     def _validate(self, api_key: str) -> tuple[bool, str]:
         return VALIDATORS[self.provider](api_key)

@@ -13,7 +13,7 @@ DEFAULT_DATA_DIR = Path.home() / ".local" / "share" / "beyondmeetings"
 
 class Config(BaseModel):
     vault_path: str = ""
-    provider: str = "anthropic"
+    provider: str = "claude-cli"
     model: str = ""
     transcriber: str = "groq"
     spoken_language: str = "auto"
@@ -25,6 +25,8 @@ class Config(BaseModel):
     ollama_num_ctx: int = 32768
     whisper_binary: str = ""
     whisper_model: str = "medium.en"
+    # Override the agent CLI invocation without a code change.
+    agent_command: list[str] = Field(default_factory=list)
 
 
 def load_config(path: Path | None = None) -> Config:

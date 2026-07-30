@@ -41,6 +41,7 @@ def build_checks(
             secret_dir=secret_dir,
             ollama_host=config.ollama_host,
             model=config.model,
+            agent_command=config.agent_command or None,
         ),
         WhisperModelCheck(config),
         ObsidianCheck(),

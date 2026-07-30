@@ -3,7 +3,7 @@ from beyondmeetings.config import Config, load_config, save_config
 
 def test_load_returns_defaults_when_file_absent(tmp_path):
     cfg = load_config(tmp_path / "config.toml")
-    assert cfg.provider == "anthropic"
+    assert cfg.provider == "claude-cli"  # subscription, not an API key
     assert cfg.spoken_language == "auto"
     assert cfg.notes_language == "English"
     assert cfg.projects == []

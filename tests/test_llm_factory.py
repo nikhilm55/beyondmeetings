@@ -8,9 +8,17 @@ from beyondmeetings.llm.ollama import OllamaProvider
 from beyondmeetings.llm.openai import OpenAIProvider
 
 
-def test_builds_anthropic_by_default(monkeypatch):
+def test_builds_the_agent_cli_by_default(monkeypatch):
+    """The default must not require an API key — most users have none."""
+    from beyondmeetings.llm.agent_cli import AgentCliProvider
+
     monkeypatch.setattr("beyondmeetings.llm.factory.get_secret", lambda *a, **k: "sk-x")
-    assert isinstance(build_provider(Config()), AnthropicProvider)
+    assert isinstance(build_provider(Config()), AgentCliProvider)
+
+
+def test_builds_anthropic_when_explicitly_chosen(monkeypatch):
+    monkeypatch.setattr("beyondmeetings.llm.factory.get_secret", lambda *a, **k: "sk-x")
+    assert isinstance(build_provider(Config(provider="anthropic")), AnthropicProvider)
 
 
 def test_builds_each_supported_provider(monkeypatch):

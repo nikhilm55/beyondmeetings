@@ -6,16 +6,34 @@ from beyondmeetings.doctor.choices import ProviderChoice, TranscriberChoice
 from beyondmeetings.doctor.mcp import McpCheck
 
 
-def test_provider_choice_offers_all_four():
+def test_provider_choice_offers_keyless_and_keyed_options():
     options = {o["value"] for o in ProviderChoice(Config()).choices}
-    assert options == {"anthropic", "openai", "gemini", "ollama"}
+    assert options == {
+        "claude-cli", "codex-cli", "gemini-cli", "ollama",
+        "anthropic", "openai", "gemini",
+    }
 
 
-def test_claude_is_marked_recommended():
+def test_keyless_options_come_first():
+    """An API key needs credits; a subscription does not. Lead with those."""
+    values = [o["value"] for o in ProviderChoice(Config()).choices]
+    first_keyed = values.index("anthropic")
+    for keyless in ("claude-cli", "codex-cli", "gemini-cli", "ollama"):
+        assert values.index(keyless) < first_keyed
+
+
+def test_keyed_options_say_they_need_credits():
+    for option in ProviderChoice(Config()).choices:
+        if option["value"] in ("anthropic", "openai", "gemini"):
+            assert "credits" in option["note"] or "quota" in option["note"]
+
+
+def test_claude_code_is_marked_recommended():
     claude = next(
-        o for o in ProviderChoice(Config()).choices if o["value"] == "anthropic"
+        o for o in ProviderChoice(Config()).choices if o["value"] == "claude-cli"
     )
     assert claude["recommended"] is True
+    assert "No API key" in claude["note"]
 
 
 def test_only_one_provider_is_recommended():
@@ -61,7 +79,7 @@ def test_transcriber_fix_persists(tmp_path):
 
 
 def test_choices_are_exposed_on_the_row():
-    assert len(run_all([ProviderChoice(Config())])[0]["choices"]) == 4
+    assert len(run_all([ProviderChoice(Config())])[0]["choices"]) == 7
 
 
 def test_rows_without_choices_expose_an_empty_list():

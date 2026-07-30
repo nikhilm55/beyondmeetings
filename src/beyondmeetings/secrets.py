@@ -64,6 +64,26 @@ def set_secret(name: str, value: str, fallback_dir: Path | None = None) -> None:
         os.chmod(path, 0o600)  # tighten an existing file that was too open
 
 
+def secret_location(name: str, fallback_dir: Path | None = None) -> str | None:
+    """Where a stored secret actually lives: 'keyring', 'file', or None.
+
+    Asked directly rather than remembered from the last write, which is process
+    local and so reported nothing useful on a fresh `doctor` run.
+    """
+    try:
+        if keyring.get_password(SERVICE, name):
+            return "keyring"
+    except Exception:
+        pass
+
+    path = _fallback_path(fallback_dir)
+    if path.exists():
+        with path.open("rb") as fh:
+            if tomllib.load(fh).get(name):
+                return "file"
+    return None
+
+
 def get_secret(name: str, fallback_dir: Path | None = None) -> str | None:
     try:
         value = keyring.get_password(SERVICE, name)

@@ -6,14 +6,26 @@ from pathlib import Path
 from ..config import Config, save_config
 from .base import Check, CheckResult
 
+# Subscription-based options come first deliberately. An API key needs credits,
+# which most people on a Pro/Max/Plus plan do not have — offering only keyed
+# providers locked out the majority of likely users.
 PROVIDERS = [
-    {"value": "anthropic", "label": "Claude", "recommended": True,
-     "note": "Best summary quality and follow-up detection."},
-    {"value": "openai", "label": "ChatGPT", "recommended": False, "note": ""},
-    {"value": "gemini", "label": "Gemini", "recommended": False, "note": ""},
+    {"value": "claude-cli", "label": "Claude Code", "recommended": True,
+     "note": "Uses your Claude subscription. No API key, no credits. "
+             "Best summary quality."},
+    {"value": "codex-cli", "label": "Codex CLI", "recommended": False,
+     "note": "Uses your ChatGPT subscription. No API key."},
+    {"value": "gemini-cli", "label": "Gemini CLI", "recommended": False,
+     "note": "Uses your Google account. No API key."},
     {"value": "ollama", "label": "Ollama (local)", "recommended": False,
      "note": "Nothing leaves your machine. Weaker on code-mixed speech "
              "such as Hinglish."},
+    {"value": "anthropic", "label": "Claude API", "recommended": False,
+     "note": "Needs an API key with credits — separate from a Claude subscription."},
+    {"value": "openai", "label": "ChatGPT API", "recommended": False,
+     "note": "Needs an API key with credits."},
+    {"value": "gemini", "label": "Gemini API", "recommended": False,
+     "note": "Needs an API key with quota."},
 ]
 
 TRANSCRIBERS = [

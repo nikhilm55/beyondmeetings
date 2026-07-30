@@ -35,7 +35,7 @@ These were settled during design. Reopening them wastes a session.
 | Stack | **Python + local web UI + system tray** | Python 3 ships on every Linux; no Node/Rust toolchain; low contributor barrier |
 | Wizard form | **Single-screen live checklist** with % ring | Setup is a *detection* problem; also works as a repair tool on re-run |
 | Daily UI | **Tray + full page** at `localhost:7788` | Same FastAPI app as the wizard; "re-run notes" recovery must not need a terminal |
-| Note providers | **Claude / ChatGPT / Gemini / Ollama** — Claude badged *Recommended* | Ollama noted as weaker on code-mixed (Hinglish) transcripts |
+| Note providers | **Agent CLIs first** (Claude Code / Codex / Gemini CLI), then Ollama, then API keys. Claude Code badged *Recommended* and is the default | **Corrected 2026-07-30 after the real-recording test.** An API-key-only design locked out everyone on a Claude Pro/Max, ChatGPT Plus or Gemini subscription — they have working inference installed but no API credits, and that is most likely users. `claude -p` with the prompt on stdin was verified working on a subscription. Prompt goes over stdin, not argv, because an hour-long transcript exceeds sane argument sizes |
 | Transcription | **Groq default, whisper.cpp opt-in** | Groq is fast + free tier; local option for privacy |
 | Note target | **Obsidian required** | Task Board / Home.md dashboards are Obsidian-flavoured |
 | Distribution | **`curl \| bash` bootstrap** | One README line; script stays short and auditable |
@@ -289,10 +289,32 @@ The reviewer argued three designs are wrong, not just their code. I agree, and n
 
 **The project is feature-complete against the spec.** All four milestones are code complete and all five original bugs are fixed. What is left is verification and release hygiene, not features.
 
-### Never exercised against reality
+### Real-recording test — 2026-07-30 ✅
 
-1. **No real recording has ever been made.** Every layer above the audio capture is tested, but `pw-record`/`pactl` have only ever been driven by a fake runner. This is the largest untested surface in the project, and the code review is a reminder of what that hides — the app's Start button was broken in a way no test caught. Steps are in §6.
-2. **No provider has made a live API call.** All four adapters are tested with mocked HTTP — request shape and parsing are verified, but the first real key entered will also be the first real request. Same for Groq transcription.
+Ran for the first time. **Six things worked on the first try:**
+
+| | Result |
+|---|---|
+| `pw-record` capture | ✅ 5.6 MB WAV from a real 30s recording |
+| Compression + Groq upload | ✅ no 413 — review fix #1 validated live |
+| **Hindi kept in Devanagari, not translated** | ✅ **B5 proven fixed** — the old `language=en` would have mangled it |
+| Segment transcript cache | ✅ `seg000.txt` written beside the audio |
+| Transcript saved before the LLM ran | ✅ the recording survived a provider failure |
+| Recorder state cleaned up | ✅ no wedge, no orphaned modules |
+| `is_informal` on real content | ✅ recognised a tooling smoke test as personal — note kept its action item, Task Board stayed at 0 |
+| Filename sanitising | ✅ em-dash title → `-` in the filename, em-dash preserved in the display link |
+
+**The one failure was architectural, not a bug:** note generation needs an API key, and the user is on a subscription with no credits. Gemini API returned `429 limit: 0` for an account that has never used it. Fixed by adding agent-CLI providers (see the decisions table). Regenerating the same transcript through `claude-cli` produced a correct, high-quality note including a `transcription_note` that flagged the garbled Hindi and listed its inferred substitutions.
+
+**Two orphans found during setup, both pre-existing:**
+
+- `pw-record` from the **old bash pipeline, running since 2026-07-17 — 13 days, 73 GB**, capturing mic and system audio continuously. Its PID lived in `~/meetings/.record_pid`, which was long gone, so nothing knew it existed. B4 in its most literal form.
+- A 2.6 GB orphan from one of this session's intermediate test runs. The current suite spawns nothing — verified by process count before/after and by grep for `PipeWireRecorder(` without an injected runner.
+
+### Still never exercised against reality
+
+1. **Long-meeting rollover has not run for real.** The 3-hour simulation used a fake clock; a real 50-minute rollover has never happened. Every layer above the audio capture is tested, but `pw-record`/`pactl` have only ever been driven by a fake runner. This is the largest untested surface in the project, and the code review is a reminder of what that hides — the app's Start button was broken in a way no test caught. Steps are in §6.
+2. **Only Groq and `claude-cli` have run for real.** The OpenAI, Gemini, Anthropic and Ollama adapters remain mock-tested only. `codex-cli` and `gemini-cli` command shapes are unverified — neither CLI is installed here — which is why `agent_command` exists as a config override.
 3. **whisper.cpp has never actually run.** The binary exists on this machine at `~/whispercpp/whisper.cpp/build/bin/whisper-cli`; the adapter's argument construction is tested with a fake runner but never invoked for real.
 4. **The tray icon has never been displayed.** `pystray` is installed in the dev venv and the icon images render correctly (verified pixel values), but `icon.run()` has not been called on a real desktop session.
 
@@ -353,5 +375,6 @@ Append one line per session. Newest last.
 - **2026-07-30** — Python bootstrap strategy decided (system Python, `uv` fallback) and recorded in spec §11.
 - **2026-07-30** — Milestone 2 planned and implemented on the same branch. 226 tests passing. Wizard verified booting and driving its full fix flow against a throwaway vault; `doctor` verified against this machine at 50%. Remaining before GitHub: the three release blockers above, plus milestone 1's real-recording check.
 - **2026-07-30** — Milestone 3 planned and implemented. 330 tests passing. All four providers, whisper.cpp, both factories, and MCP registration done. Verified provider/transcriber switching reshapes the check list, and MCP registration preserves an existing `~/.claude.json`. Still outstanding: the real-recording test, and no provider has yet made a live API call.
+- **2026-07-30** — **First real recording test.** Capture, compression, Groq transcription, Hindi fidelity, segment caching, transcript-safety and the informal-call rule all worked first time. Note generation failed for a structural reason: API-key-only providers exclude subscription users. Added agent-CLI providers (`claude-cli` default, verified working with no key); 510 tests passing. Also found a 13-day / 73 GB orphaned recorder left by the old bash pipeline.
 - **2026-07-30** — External code review; 13 findings. Tier 1 + 2 fixed across 5 commits, 488 tests passing. Biggest: the app's Start/Stop could never have worked (raw WAV to Groq), caused by two divergent stop pipelines. Also fixed a DNS-rebinding + file-exfiltration hole the review found beyond its own list. Tier 3 architecture work deferred and documented.
 - **2026-07-30** — Milestone 4 planned and implemented. 407 tests passing. **Project is feature-complete against the spec.** App page, tray, history, regenerate-on-failure, autostart. **B2 verified closed** by simulating a 3-hour meeting: API calls at 09:50/10:40/11:30 and only one at stop time. `pystray` + `pillow` installed in the dev venv so the icon tests run rather than skip. Everything in §5 "never exercised against reality" is what remains.

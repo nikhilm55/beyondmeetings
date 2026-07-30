@@ -90,3 +90,22 @@ def test_last_store_reports_where_the_key_went(monkeypatch, tmp_path):
     monkeypatch.setattr(secrets_mod, "keyring", FakeKeyring())
     secrets_mod.set_secret("groq_api_key", "gsk", fallback_dir=tmp_path)
     assert secrets_mod.last_store() == "keyring"
+
+
+def test_secret_location_reports_the_file_fallback(monkeypatch, tmp_path):
+    """doctor runs in a fresh process, so the last-write global is useless."""
+    monkeypatch.setattr(secrets_mod, "keyring", FakeKeyring(working=False))
+    secrets_mod.set_secret("groq_api_key", "gsk", fallback_dir=tmp_path)
+    assert secrets_mod.secret_location("groq_api_key", fallback_dir=tmp_path) == "file"
+
+
+def test_secret_location_reports_the_keyring(monkeypatch, tmp_path):
+    fake = FakeKeyring()
+    monkeypatch.setattr(secrets_mod, "keyring", fake)
+    secrets_mod.set_secret("groq_api_key", "gsk", fallback_dir=tmp_path)
+    assert secrets_mod.secret_location("groq_api_key", fallback_dir=tmp_path) == "keyring"
+
+
+def test_secret_location_is_none_when_absent(monkeypatch, tmp_path):
+    monkeypatch.setattr(secrets_mod, "keyring", FakeKeyring())
+    assert secrets_mod.secret_location("absent", fallback_dir=tmp_path) is None

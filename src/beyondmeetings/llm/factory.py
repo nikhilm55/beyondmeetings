@@ -4,6 +4,7 @@ from __future__ import annotations
 from ..config import Config
 from ..labels import provider_label
 from ..secrets import get_secret
+from .agent_cli import AGENT_COMMANDS, AgentCliProvider
 from .anthropic import AnthropicProvider
 from .base import LLMProvider
 from .gemini import GeminiProvider
@@ -25,6 +26,10 @@ KEYED = {
 
 def build_provider(config: Config) -> LLMProvider:
     name = config.provider
+
+    # Agent CLIs need no key at all — they use the user's own subscription.
+    if name in AGENT_COMMANDS:
+        return AgentCliProvider(name, command=config.agent_command or None)
 
     if name == "ollama":
         return OllamaProvider(
