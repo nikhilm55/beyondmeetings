@@ -17,9 +17,14 @@ class McpCheck(Check):
     )
     required = False
 
-    def __init__(self, config: Config, home: Path | None = None):
+    def __init__(
+        self, config: Config, home: Path | None = None, use_cli: bool = True
+    ):
         self.config = config
         self.home = Path(home or Path.home())
+        # Tests point `home` at a temp dir; the agent's own CLI would ignore
+        # that and write to the real config, so it must be switchable.
+        self.use_cli = use_cli
 
     def _registered(self, agent: str) -> bool:
         path = self.home / AGENTS[agent]["path"]
@@ -60,6 +65,17 @@ class McpCheck(Check):
             )
         from ..mcp_setup import register_mcp
 
+        failures = []
         for agent in detect_agents():
-            register_mcp(agent, self.config.vault_path, home=self.home)
+            try:
+                register_mcp(
+                    agent, self.config.vault_path, home=self.home,
+                    use_cli=self.use_cli,
+                )
+            except Exception as exc:
+                # One agent failing must not abandon the others half-done.
+                failures.append(f"{AGENTS[agent]['label']}: {exc}")
+
+        if failures:
+            return CheckResult(status="broken", detail="; ".join(failures))
         return self.detect()

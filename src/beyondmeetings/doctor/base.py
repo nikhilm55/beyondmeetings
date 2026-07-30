@@ -69,6 +69,22 @@ def run_all(checks: list[Check]) -> list[dict]:
     return rows
 
 
+def run_fix(check: Check, payload: dict | None = None) -> CheckResult:
+    """Apply a fix, containing failures the way run_all contains detect().
+
+    An unguarded fix() gave the wizard a 500 and a traceback instead of a red
+    row — e.g. a read-only home while registering MCP for a second agent.
+    """
+    try:
+        return check.fix(**(payload or {}))
+    except NotImplementedError:
+        return CheckResult(
+            status="broken", detail=f"{check.id} cannot be fixed automatically."
+        )
+    except Exception as exc:
+        return CheckResult(status="broken", detail=f"Could not fix this: {exc}")
+
+
 def completion_percent(rows: list[dict]) -> int:
     required = [r for r in rows if r["required"]]
     if not required:

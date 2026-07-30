@@ -38,9 +38,11 @@ def app_and_session(tmp_path):
     vault = tmp_path / "vault"
     vault.mkdir()
     scaffold_vault(vault)
+    data = tmp_path / "data"
+    (data / "transcripts").mkdir(parents=True)
     session = FakeSession()
     app = create_app(
-        config=Config(vault_path=str(vault)),
+        config=Config(vault_path=str(vault), data_dir=str(data)),
         config_path=tmp_path / "config.toml",
         checks_factory=lambda c: [],
         session=session,
@@ -149,15 +151,16 @@ def test_history_is_empty_without_a_vault(tmp_path):
     assert TestClient(app).get("/api/meetings").json()["meetings"] == []
 
 
-def test_regenerate_requires_an_existing_transcript(app_and_session):
+def test_regenerate_requires_an_existing_transcript(app_and_session, tmp_path):
     client, _, _ = app_and_session
-    response = client.post("/api/regenerate", json={"transcript": "/nope.txt"})
+    missing = tmp_path / "data" / "transcripts" / "nope.txt"
+    response = client.post("/api/regenerate", json={"transcript": str(missing)})
     assert response.status_code == 404
 
 
 def test_regenerate_writes_a_note(app_and_session, tmp_path, monkeypatch):
     client, _, _ = app_and_session
-    transcript = tmp_path / "t.txt"
+    transcript = tmp_path / "data" / "transcripts" / "t.txt"
     transcript.write_text("we discussed things")
 
     from beyondmeetings import server as server_mod
@@ -178,7 +181,7 @@ def test_regenerate_writes_a_note(app_and_session, tmp_path, monkeypatch):
 def test_regenerate_surfaces_a_provider_failure_as_400(app_and_session, tmp_path,
                                                        monkeypatch):
     client, _, _ = app_and_session
-    transcript = tmp_path / "t.txt"
+    transcript = tmp_path / "data" / "transcripts" / "t.txt"
     transcript.write_text("text")
 
     from beyondmeetings import server as server_mod
@@ -196,3 +199,38 @@ def test_reset_endpoint_clears_a_wedged_session(app_and_session):
     client, session, _ = app_and_session
     session.reset = lambda: {**session.state, "phase": "idle"}
     assert client.post("/api/recording/reset", json={}).json()["phase"] == "idle"
+
+
+# --- Review finding: DNS rebinding + arbitrary-path exfiltration ---
+
+def test_regenerate_refuses_a_path_outside_the_transcripts_dir(app_and_session,
+                                                               tmp_path):
+    """Reading any path and posting it to an LLM is an exfiltration primitive."""
+    secret = tmp_path / "id_rsa"
+    secret.write_text("PRIVATE KEY")
+    client, _, _ = app_and_session
+    response = client.post("/api/regenerate", json={"transcript": str(secret)})
+    assert response.status_code == 403
+    assert "PRIVATE KEY" not in response.text
+
+
+def test_regenerate_refuses_traversal_out_of_the_transcripts_dir(app_and_session,
+                                                                 tmp_path):
+    client, _, _ = app_and_session
+    sneaky = tmp_path / "data" / "transcripts" / ".." / ".." / "id_rsa"
+    assert client.post(
+        "/api/regenerate", json={"transcript": str(sneaky)}
+    ).status_code == 403
+
+
+def test_a_foreign_host_header_is_rejected(app_and_session):
+    """DNS rebinding: attacker.com resolving to 127.0.0.1 would be same-origin."""
+    client, _, _ = app_and_session
+    response = client.get("/api/recording", headers={"host": "evil.example.com"})
+    assert response.status_code == 421
+
+
+def test_localhost_and_loopback_hosts_are_accepted(app_and_session):
+    client, _, _ = app_and_session
+    for host in ("localhost:7788", "127.0.0.1:7788"):
+        assert client.get("/api/recording", headers={"host": host}).status_code == 200

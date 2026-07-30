@@ -1,3 +1,4 @@
+import os
 import stat
 
 from beyondmeetings import secrets as secrets_mod
@@ -45,3 +46,47 @@ def test_fallback_file_is_owner_only(monkeypatch, tmp_path):
 def test_missing_secret_returns_none(monkeypatch, tmp_path):
     monkeypatch.setattr(secrets_mod, "keyring", FakeKeyring())
     assert secrets_mod.get_secret("absent", fallback_dir=tmp_path) is None
+
+
+# --- Review finding #11: world-readable window; silent keyring fallback ---
+
+def test_fallback_file_is_never_world_readable_even_briefly(monkeypatch, tmp_path):
+    """chmod after write left the key readable for the duration of the write."""
+    monkeypatch.setattr(secrets_mod, "keyring", FakeKeyring(working=False))
+    seen = []
+    real_fdopen = os.fdopen
+
+    def watching_fdopen(fd, *a, **k):
+        handle = real_fdopen(fd, *a, **k)
+        seen.append(stat.S_IMODE(os.fstat(fd).st_mode))
+        return handle
+
+    monkeypatch.setattr(os, "fdopen", watching_fdopen)
+    secrets_mod.set_secret("groq_api_key", "gsk_SECRET", fallback_dir=tmp_path)
+    assert seen and all(mode == 0o600 for mode in seen), seen
+
+
+def test_an_existing_loose_file_is_tightened(monkeypatch, tmp_path):
+    monkeypatch.setattr(secrets_mod, "keyring", FakeKeyring(working=False))
+    path = tmp_path / "secrets.toml"
+    path.write_text("")
+    os.chmod(path, 0o644)
+    secrets_mod.set_secret("groq_api_key", "gsk", fallback_dir=tmp_path)
+    assert stat.S_IMODE(path.stat().st_mode) == 0o600
+
+
+def test_keyring_failure_is_logged_not_swallowed(monkeypatch, tmp_path, caplog):
+    monkeypatch.setattr(secrets_mod, "keyring", FakeKeyring(working=False))
+    with caplog.at_level("WARNING"):
+        secrets_mod.set_secret("groq_api_key", "gsk", fallback_dir=tmp_path)
+    assert "keyring unavailable" in caplog.text
+
+
+def test_last_store_reports_where_the_key_went(monkeypatch, tmp_path):
+    monkeypatch.setattr(secrets_mod, "keyring", FakeKeyring(working=False))
+    secrets_mod.set_secret("groq_api_key", "gsk", fallback_dir=tmp_path)
+    assert secrets_mod.last_store() == "file"
+
+    monkeypatch.setattr(secrets_mod, "keyring", FakeKeyring())
+    secrets_mod.set_secret("groq_api_key", "gsk", fallback_dir=tmp_path)
+    assert secrets_mod.last_store() == "keyring"

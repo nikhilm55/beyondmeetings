@@ -1,5 +1,5 @@
 from beyondmeetings.doctor.base import (
-    Check, CheckResult, completion_percent, run_all,
+    Check, CheckResult, completion_percent, run_all, run_fix,
 )
 
 
@@ -63,3 +63,38 @@ def test_detect_failure_is_reported_as_broken_not_raised():
     row = run_all([Exploding("a", "ok")])[0]
     assert row["status"] == "broken"
     assert "boom" in row["detail"]
+
+
+# --- Review finding #12: fix() was unguarded while detect() was guarded ---
+
+def test_run_fix_contains_an_exception(monkeypatch):
+    from beyondmeetings.doctor.base import run_fix
+
+    class Exploding(Stub):
+        def fix(self, **kwargs):
+            raise OSError("read-only file system")
+
+    result = run_fix(Exploding("a", "missing"))
+    assert result.status == "broken"
+    assert "read-only" in result.detail
+
+
+def test_run_fix_reports_an_unfixable_check():
+    from beyondmeetings.doctor.base import Check, CheckResult, run_fix
+
+    class NotFixable(Check):
+        id = "nope"
+        label = "Nope"
+
+        def detect(self):
+            return CheckResult(status="missing")
+
+    result = run_fix(NotFixable())
+    assert result.status == "broken"
+    assert "cannot be fixed" in result.detail
+
+
+def test_run_fix_passes_the_payload_through():
+    stub = Stub("a", "missing", fixable=True)
+    assert run_fix(stub).status == "ok"
+    assert stub.fixed is True

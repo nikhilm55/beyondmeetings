@@ -5,6 +5,7 @@ so the fallback is a supported path, not an error case.
 """
 from __future__ import annotations
 
+import logging
 import os
 import tomllib
 from pathlib import Path
@@ -14,7 +15,17 @@ import tomli_w
 
 from .config import DEFAULT_CONFIG_PATH
 
+log = logging.getLogger(__name__)
+
 SERVICE = "beyondmeetings"
+
+# Set when the keyring was unavailable, so the wizard can say where a key
+# actually went instead of implying it reached the OS keyring.
+_last_store: str | None = None
+
+
+def last_store() -> str | None:
+    return _last_store
 
 
 def _fallback_path(fallback_dir: Path | None) -> Path:
@@ -23,22 +34,34 @@ def _fallback_path(fallback_dir: Path | None) -> Path:
 
 
 def set_secret(name: str, value: str, fallback_dir: Path | None = None) -> None:
+    global _last_store
     try:
         keyring.set_password(SERVICE, name, value)
+        _last_store = "keyring"
         return
-    except Exception:
-        pass
+    except Exception as exc:
+        # The fallback is a supported path; silence about it was not. The user
+        # was told "key verified" and never learned it sits in a file.
+        log.warning("OS keyring unavailable (%s); using a 0600 file instead", exc)
+        _last_store = "file"
 
     path = _fallback_path(fallback_dir)
     path.parent.mkdir(parents=True, exist_ok=True)
+
     data = {}
     if path.exists():
         with path.open("rb") as fh:
             data = tomllib.load(fh)
     data[name] = value
-    with path.open("wb") as fh:
-        tomli_w.dump(data, fh)
-    os.chmod(path, 0o600)
+
+    # Create with 0600 rather than chmod after writing — the old order left the
+    # key world-readable for the duration of the write.
+    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    try:
+        with os.fdopen(fd, "wb") as fh:
+            tomli_w.dump(data, fh)
+    finally:
+        os.chmod(path, 0o600)  # tighten an existing file that was too open
 
 
 def get_secret(name: str, fallback_dir: Path | None = None) -> str | None:

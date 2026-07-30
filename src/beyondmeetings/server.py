@@ -12,11 +12,11 @@ from pathlib import Path
 from typing import Callable
 
 from fastapi import FastAPI, HTTPException
-from fastapi.responses import HTMLResponse, Response
+from fastapi.responses import HTMLResponse, JSONResponse, Response
 from pydantic import BaseModel
 
 from .config import DEFAULT_CONFIG_PATH, Config, load_config, save_config
-from .doctor.base import Check, completion_percent, run_all
+from .doctor.base import Check, completion_percent, run_all, run_fix
 from .doctor.registry import build_checks
 from .history import list_meetings
 from .llm.factory import build_provider
@@ -24,6 +24,7 @@ from .pipeline import generate_notes
 from .session import SessionManager
 
 WEB_DIR = Path(__file__).parent / "web"
+ALLOWED_HOSTS = {"127.0.0.1", "localhost", "[::1]", "::1", "testserver"}
 
 
 class SettingsPatch(BaseModel, extra="forbid"):
@@ -58,6 +59,22 @@ def create_app(
     )
 
     app = FastAPI(title="beyondMeetings")
+
+    @app.middleware("http")
+    async def guard_host(request, call_next):
+        """Reject requests whose Host header is not loopback.
+
+        Binding 127.0.0.1 does not stop DNS rebinding: an attacker's domain
+        resolving to 127.0.0.1 makes their page same-origin with this server,
+        which would otherwise hand them the regenerate endpoint.
+        """
+        host = (request.headers.get("host") or "").split(":")[0].lower()
+        if host and host not in ALLOWED_HOSTS:
+            return JSONResponse(
+                status_code=421,
+                content={"detail": f"Unexpected Host header: {host!r}"},
+            )
+        return await call_next(request)
 
     def current_session():
         """Build the real session lazily — tests inject a fake instead."""
@@ -96,7 +113,7 @@ def create_app(
         check = next((c for c in factory(state["config"]) if c.id == check_id), None)
         if check is None:
             raise HTTPException(status_code=404, detail=f"no such check: {check_id}")
-        result = check.fix(**(payload or {}))
+        result = run_fix(check, payload)
         # Rebuild config from disk — a fix may have written to it (e.g. vault).
         state["config"] = load_config(config_path)
         return {"result": result.model_dump(), **snapshot()}
@@ -145,6 +162,20 @@ def create_app(
     @app.post("/api/regenerate")
     def regenerate(request: RegenerateRequest):
         path = Path(request.transcript).expanduser()
+
+        # Reading any caller-supplied path and shipping it to a third-party API
+        # is a file-exfiltration primitive. Only our own transcripts qualify.
+        transcripts = (Path(state["config"].data_dir) / "transcripts").resolve()
+        try:
+            inside = path.resolve().is_relative_to(transcripts)
+        except (OSError, RuntimeError):
+            inside = False
+        if not inside:
+            raise HTTPException(
+                status_code=403,
+                detail=f"Only transcripts under {transcripts} can be regenerated.",
+            )
+
         if not path.is_file():
             raise HTTPException(status_code=404, detail=f"No transcript at {path}")
         try:

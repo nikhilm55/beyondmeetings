@@ -71,20 +71,20 @@ def test_rows_without_choices_expose_an_empty_list():
 
 def test_mcp_check_ok_when_no_agent_cli_installed(monkeypatch, tmp_path):
     monkeypatch.setattr("beyondmeetings.doctor.mcp.detect_agents", lambda: [])
-    result = McpCheck(Config(vault_path=str(tmp_path)), home=tmp_path).detect()
+    result = McpCheck(Config(vault_path=str(tmp_path)), home=tmp_path, use_cli=False).detect()
     assert result.status == "ok"
     assert "No agent CLI" in result.detail
 
 
 def test_mcp_check_missing_when_agent_present_but_unregistered(monkeypatch, tmp_path):
     monkeypatch.setattr("beyondmeetings.doctor.mcp.detect_agents", lambda: ["claude"])
-    check = McpCheck(Config(vault_path=str(tmp_path)), home=tmp_path)
+    check = McpCheck(Config(vault_path=str(tmp_path)), home=tmp_path, use_cli=False)
     assert check.detect().status == "missing"
 
 
 def test_mcp_fix_registers_into_each_detected_agent(monkeypatch, tmp_path):
     monkeypatch.setattr("beyondmeetings.doctor.mcp.detect_agents", lambda: ["claude"])
-    check = McpCheck(Config(vault_path=str(tmp_path)), home=tmp_path)
+    check = McpCheck(Config(vault_path=str(tmp_path)), home=tmp_path, use_cli=False)
     assert check.fix().status == "ok"
     data = json.loads((tmp_path / ".claude.json").read_text())
     assert "beyondmeetings-vault" in data["mcpServers"]
@@ -92,23 +92,23 @@ def test_mcp_fix_registers_into_each_detected_agent(monkeypatch, tmp_path):
 
 def test_mcp_check_ok_once_registered(monkeypatch, tmp_path):
     monkeypatch.setattr("beyondmeetings.doctor.mcp.detect_agents", lambda: ["claude"])
-    check = McpCheck(Config(vault_path=str(tmp_path)), home=tmp_path)
+    check = McpCheck(Config(vault_path=str(tmp_path)), home=tmp_path, use_cli=False)
     check.fix()
     assert check.detect().status == "ok"
 
 
 def test_mcp_is_not_required(tmp_path):
-    assert McpCheck(Config(), home=tmp_path).required is False
+    assert McpCheck(Config(), home=tmp_path, use_cli=False).required is False
 
 
 def test_mcp_fix_without_a_vault_is_refused(monkeypatch, tmp_path):
     monkeypatch.setattr("beyondmeetings.doctor.mcp.detect_agents", lambda: ["claude"])
-    assert McpCheck(Config(), home=tmp_path).fix().status == "broken"
+    assert McpCheck(Config(), home=tmp_path, use_cli=False).fix().status == "broken"
 
 
 def test_mcp_survives_a_corrupt_agent_config(monkeypatch, tmp_path):
     """A broken config must report unregistered, not crash the wizard."""
     monkeypatch.setattr("beyondmeetings.doctor.mcp.detect_agents", lambda: ["claude"])
     (tmp_path / ".claude.json").write_text("{ not json")
-    check = McpCheck(Config(vault_path=str(tmp_path)), home=tmp_path)
+    check = McpCheck(Config(vault_path=str(tmp_path)), home=tmp_path, use_cli=False)
     assert check.detect().status == "missing"

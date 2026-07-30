@@ -6,22 +6,32 @@ regex cannot catch a revoked or wrong-account key.
 """
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 import httpx
 
 from ..labels import provider_label
-from ..secrets import get_secret, set_secret
+from ..secrets import get_secret, last_store, set_secret
 from .base import Check, CheckResult, InputField
 
 TIMEOUT = 20.0
 
 
+_KEY_FRAGMENT = re.compile(r"\b(sk|gsk|pk)[-_][A-Za-z0-9_\-*]{4,}", re.IGNORECASE)
+
+
 def _error_detail(response: httpx.Response) -> str:
+    """Provider error text, with key fragments stripped.
+
+    OpenAI's 401 body echoes a partially-redacted key, and this string reaches
+    both the browser and the terminal.
+    """
     try:
-        return response.json().get("error", {}).get("message", response.text[:200])
+        detail = response.json().get("error", {}).get("message", response.text[:200])
     except Exception:
-        return response.text[:200]
+        detail = response.text[:200]
+    return _KEY_FRAGMENT.sub("<redacted>", str(detail))[:200]
 
 
 def validate_groq_key(api_key: str) -> tuple[bool, str]:
@@ -134,7 +144,13 @@ class _KeyCheck(Check):
             return CheckResult(status="missing", detail="No key stored yet.")
         ok, detail = self._validate(key)
         if ok:
-            return CheckResult(status="ok", detail="Key verified with a live call.")
+            where = {
+                "keyring": "stored in your OS keyring",
+                "file": "stored in a 0600 file — no OS keyring was available",
+            }.get(last_store(), "stored")
+            return CheckResult(
+                status="ok", detail=f"Key verified with a live call, {where}."
+            )
         return CheckResult(status="broken", detail=f"Stored key rejected: {detail}")
 
     @property

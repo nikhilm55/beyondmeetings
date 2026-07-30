@@ -105,3 +105,28 @@ def test_every_provider_now_has_a_working_check(tmp_path, file_secrets):
         check = ProviderKeyCheck(provider=provider, secret_dir=tmp_path)
         assert check.label
         assert "milestone" not in check.description.lower()
+
+
+# --- Review findings #11, #12 ---
+
+def test_error_detail_redacts_key_fragments():
+    """OpenAI's 401 body echoes a partial key, and this reaches the browser."""
+    import httpx
+
+    from beyondmeetings.doctor.keys import _error_detail
+
+    response = httpx.Response(
+        401,
+        json={"error": {"message": "Incorrect API key provided: sk-proj-AbCd1234XYZ"}},
+    )
+    detail = _error_detail(response)
+    assert "sk-proj-AbCd1234XYZ" not in detail
+    assert "<redacted>" in detail
+
+
+def test_detect_says_where_a_verified_key_is_stored(tmp_path, httpx_mock,
+                                                    file_secrets):
+    file_secrets.set_secret("groq_api_key", "gsk_good", fallback_dir=tmp_path)
+    httpx_mock.add_response(json={"data": []})
+    detail = GroqKeyCheck(secret_dir=tmp_path).detect().detail
+    assert "0600 file" in detail or "keyring" in detail
