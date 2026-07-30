@@ -238,13 +238,60 @@ That is the behaviour the old `CLAUDE.md` described but never implemented. The 2
 
 ---
 
+## 4b. Code review — 2026-07-30
+
+An external review found **13 findings**, most CONFIRMED by reproduction. Tier 1 (blockers) and Tier 2 (ship-blockers) are fixed; every fix has a regression test. **488 tests passing.**
+
+### The blocker
+
+**The app's Start/Stop button could not work at all.** `compress_for_upload` had exactly one caller — `cli.py` — so the app path uploaded raw WAV to Groq: ~1.15 GB per 50-minute segment against a 25 MB cap, retried six times. Compression now lives *inside* `GroqTranscriber.transcribe_file`, where no caller can forget it.
+
+Root cause: `cli.py stop` and `session.run_stop()` were two independent stop pipelines that diverged — only one compressed, only one used the segment cache, only one closed B2. `cli.py stop` now delegates to `run_stop()`. This is the same duplication failure this project cites as its reason for generating the three rules files from one template.
+
+### Fixed, with regression tests
+
+| # | Finding | Fix |
+|---|---|---|
+| 1 | App uploaded raw WAV; two divergent stop pipelines | Compression inside the transcriber; one pipeline |
+| 2 | `stop()` raced a mid-flight `roll_segment()`, wedging the app permanently | Join the ticker before teardown; recorder owns a lock |
+| 3 | Follow-up back-link landed under the *last* section, not `## Follow-ups` | Section ends at the next heading; handles renamed headings, EOF headings, code fences |
+| 4 | `add_tasks` not idempotent — Regenerate duplicated every task and counter | Skips entries already on the board for that meeting |
+| 5 | Model-controlled `date` reached the filesystem; `../../tmp` escaped the vault, and `2026-7-9` wrote invisible notes | Pattern-validated `IsoDate`; containment assert at the write; malformed date degrades to the recording date |
+| 6 | `~/.claude.json` downgraded to 0644, symlinks clobbered, no fsync, `.bak` overwritten | Mode preserved, symlink followed, fsync before rename, pristine backup kept; Claude Code's own CLI preferred |
+| 7 | Four crash paths on realistic API responses (null content, missing content key, HTML error body, truncation) | Shared `llm/http.py`; finish-reason checks; `max_tokens` 8000→16000 |
+| 8 | `start()` check-then-act — four concurrent calls all loaded PipeWire modules | Guards and `recorder.start()` inside the lock |
+| 9 | A corrupt state file 500'd every poll with no UI way out | `status()` reports it; **Clear recording state** button |
+| 10 | Ollama sent no `num_ctx`, silently dropping ~3/4 of an hour-long transcript | Explicit `num_ctx`; oversized prompts refused, not truncated |
+| 11 | Secrets world-readable during write; keyring failure silent | `os.open` with 0600; failure logged and surfaced; key fragments redacted from error text |
+| 12 | `fix()` unguarded while `detect()` was guarded | `run_fix()` contains failures the same way |
+| 13 | YAML frontmatter injection; `retry-after: "7.66s"` crashed `float()` | Values escaped (verified with PyYAML); tolerant `retry-after` parsing |
+
+Plus a **DNS-rebinding + file-exfiltration hole** the review found that wasn't in the original list: binding 127.0.0.1 doesn't stop an attacker's domain resolving there, and `/api/regenerate` read any path and shipped it to a third-party API. Now Host must be loopback, and only files under `data_dir/transcripts` are readable.
+
+### Verified against real behaviour, not just tests
+
+- Exfiltration attempt on `id_rsa` → **403**, contents never in the response
+- `Host: evil.example.com` → **421**; `localhost:7788` → 200
+- A 0600 symlinked `~/.claude.json` → symlink intact, mode `0o600`, existing keys preserved
+- The real `~/.claude.json` md5 is **unchanged** across the whole suite
+
+### Deferred (Tier 3, architecture)
+
+The reviewer argued three designs are wrong, not just their code. I agree, and none are done:
+
+1. **Regexes are the wrong tool for editing live user files.** Eight regexes across `taskboard.py`/`home.py`/`followup.py` must agree about document structure, and #3 was two of them disagreeing. Seven bugs have now shipped in this layer. The fix that closes the class is explicit region markers (`%% beyondmeetings:pending-start %%`) or a parsed structural model — which would also make #4 idempotent for free rather than by string matching.
+2. **Recording state still has two owners.** Both now lock, but `SessionManager` guards Python fields while the JSON file decides whether a recording exists. Correct today; still the wrong shape.
+3. **`generate_notes` is not transactional.** Four writes (note, back-link, board, dashboard), any of which can fail mid-way. Idempotency makes a retry safe, but a partial vault is still reachable.
+
+---
+
 ## 5. What remains before shipping
 
 **The project is feature-complete against the spec.** All four milestones are code complete and all five original bugs are fixed. What is left is verification and release hygiene, not features.
 
 ### Never exercised against reality
 
-1. **No real recording has ever been made.** Every layer above the audio capture is tested, but `pw-record`/`pactl` have only ever been driven by a fake runner. This is the largest untested surface in the project. Steps are in §6.
+1. **No real recording has ever been made.** Every layer above the audio capture is tested, but `pw-record`/`pactl` have only ever been driven by a fake runner. This is the largest untested surface in the project, and the code review is a reminder of what that hides — the app's Start button was broken in a way no test caught. Steps are in §6.
 2. **No provider has made a live API call.** All four adapters are tested with mocked HTTP — request shape and parsing are verified, but the first real key entered will also be the first real request. Same for Groq transcription.
 3. **whisper.cpp has never actually run.** The binary exists on this machine at `~/whispercpp/whisper.cpp/build/bin/whisper-cli`; the adapter's argument construction is tested with a fake runner but never invoked for real.
 4. **The tray icon has never been displayed.** `pystray` is installed in the dev venv and the icon images render correctly (verified pixel values), but `icon.run()` has not been called on a real desktop session.
@@ -255,6 +302,7 @@ That is the behaviour the old `CLAUDE.md` described but never implemented. The 2
 - [ ] Add a wizard/app screenshot to `README.md`
 - [ ] Confirm the author name in `LICENSE`
 - [ ] Review model defaults (`gpt-4o`, `gemini-2.0-flash`, `qwen2.5:14b`, `claude-opus-5`) — these churn fast
+- [ ] Decide whether to do the Tier 3 architecture work (§4b) before or after first release
 - [ ] Decide where the generated rules files live (see the milestone 2 open question about vault-root clutter)
 
 ---
@@ -305,4 +353,5 @@ Append one line per session. Newest last.
 - **2026-07-30** — Python bootstrap strategy decided (system Python, `uv` fallback) and recorded in spec §11.
 - **2026-07-30** — Milestone 2 planned and implemented on the same branch. 226 tests passing. Wizard verified booting and driving its full fix flow against a throwaway vault; `doctor` verified against this machine at 50%. Remaining before GitHub: the three release blockers above, plus milestone 1's real-recording check.
 - **2026-07-30** — Milestone 3 planned and implemented. 330 tests passing. All four providers, whisper.cpp, both factories, and MCP registration done. Verified provider/transcriber switching reshapes the check list, and MCP registration preserves an existing `~/.claude.json`. Still outstanding: the real-recording test, and no provider has yet made a live API call.
+- **2026-07-30** — External code review; 13 findings. Tier 1 + 2 fixed across 5 commits, 488 tests passing. Biggest: the app's Start/Stop could never have worked (raw WAV to Groq), caused by two divergent stop pipelines. Also fixed a DNS-rebinding + file-exfiltration hole the review found beyond its own list. Tier 3 architecture work deferred and documented.
 - **2026-07-30** — Milestone 4 planned and implemented. 407 tests passing. **Project is feature-complete against the spec.** App page, tray, history, regenerate-on-failure, autostart. **B2 verified closed** by simulating a 3-hour meeting: API calls at 09:50/10:40/11:30 and only one at stop time. `pystray` + `pillow` installed in the dev venv so the icon tests run rather than skip. Everything in §5 "never exercised against reality" is what remains.
