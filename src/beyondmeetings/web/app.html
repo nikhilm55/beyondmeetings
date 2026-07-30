@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>beyondMeetings</title>
+  <link rel="stylesheet" href="/app.css">
+</head>
+<body>
+  <main>
+    <header class="bar">
+      <strong>beyondMeetings</strong>
+      <a href="/setup" class="quiet">Settings</a>
+    </header>
+
+    <section class="control">
+      <button id="record" class="record">Start</button>
+      <div class="controlText">
+        <div class="state" id="state">Ready to record</div>
+        <div class="timer" id="timer" hidden>00:00</div>
+        <div class="detail" id="detail"></div>
+        <input id="name" class="nameInput" placeholder="Meeting name (optional)">
+      </div>
+    </section>
+
+    <section class="alert" id="alert" hidden>
+      <div class="alertText" id="alertText"></div>
+      <button id="retry" class="btn" hidden>Regenerate notes</button>
+    </section>
+
+    <section>
+      <div class="listHead">
+        <h2>Meetings</h2>
+        <input id="search" class="search" placeholder="Search…"
+               aria-label="Search meetings">
+      </div>
+      <div id="list" class="list"></div>
+      <p class="empty" id="empty" hidden>No meetings yet.</p>
+    </section>
+  </main>
+  <script src="/app.js"></script>
+</body>
+</html>
