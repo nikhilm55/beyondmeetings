@@ -68,7 +68,9 @@ function renderRow(check) {
   detail.textContent = check.detail || check.description;
   meta.append(detail);
 
-  if (!ok && check.inputs.length) meta.append(renderPanel(check));
+  // A choice row is always "ok" — it must still render its options.
+  if (check.choices && check.choices.length) meta.append(renderChoices(check));
+  else if (!ok && check.inputs.length) meta.append(renderPanel(check));
   row.append(meta);
 
   if (!ok && check.fixable && !check.inputs.length) {
@@ -79,6 +81,46 @@ function renderRow(check) {
     row.append(btn);
   }
   return row;
+}
+
+function renderChoices(check) {
+  const wrap = document.createElement("div");
+  wrap.className = "choices";
+  wrap.setAttribute("role", "radiogroup");
+  wrap.setAttribute("aria-label", check.label);
+
+  for (const option of check.choices) {
+    const btn = document.createElement("button");
+    btn.className = "choice";
+    btn.type = "button";
+    btn.setAttribute("role", "radio");
+
+    const selected = check.detail.includes(option.label);
+    btn.setAttribute("aria-checked", String(selected));
+    if (selected) btn.classList.add("selected");
+
+    const title = document.createElement("span");
+    title.className = "choiceLabel";
+    title.textContent = option.label;
+    if (option.recommended) {
+      const badge = document.createElement("span");
+      badge.className = "badge";
+      badge.textContent = "recommended";
+      title.append(badge);
+    }
+    btn.append(title);
+
+    if (option.note) {
+      const note = document.createElement("span");
+      note.className = "choiceNote";
+      note.textContent = option.note;
+      btn.append(note);
+    }
+
+    btn.onclick = () => runFix(check.id, { value: option.value }, btn);
+    wrap.append(btn);
+  }
+  return wrap;
 }
 
 function renderPanel(check) {

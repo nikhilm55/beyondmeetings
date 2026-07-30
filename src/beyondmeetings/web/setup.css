@@ -86,3 +86,24 @@ h1 { margin: 0 0 4px; font-size: 26px; letter-spacing: -0.02em; }
 @media (max-width: 520px) {
   .hero { flex-direction: column; align-items: flex-start; gap: 16px; }
 }
+
+.choices { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.choice {
+  font: inherit; text-align: left; cursor: pointer;
+  display: flex; flex-direction: column; gap: 3px;
+  padding: 9px 12px; border-radius: 8px; min-width: 150px; flex: 1;
+  border: 1px solid var(--line); background: transparent; color: var(--fg);
+}
+.choice:hover { border-color: var(--accent); }
+.choice:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.choice.selected {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+.choiceLabel { font-size: 13px; font-weight: 600; }
+.badge {
+  font-size: 9.5px; text-transform: uppercase; letter-spacing: .06em;
+  background: var(--accent); color: #fff; border-radius: 20px;
+  padding: 1px 6px; margin-left: 6px; vertical-align: 1px;
+}
+.choiceNote { font-size: 11.5px; color: var(--muted); line-height: 1.4; }

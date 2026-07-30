@@ -60,17 +60,35 @@ Run `beyondmeetings doctor` at any time to see what is missing.
 
 ## Choosing your AI
 
-| Provider | Notes |
-|---|---|
-| **Claude** | Recommended. Best summary quality and follow-up detection. |
-| **ChatGPT** | Supported. |
-| **Gemini** | Supported. |
-| **Ollama** | Fully local, no API key, nothing leaves your machine. Weaker on code-mixed speech (e.g. Hinglish) than the hosted models. |
+| Provider | Default model | Notes |
+|---|---|---|
+| **Claude** | `claude-opus-5` | Recommended. Best summary quality and follow-up detection. |
+| **ChatGPT** | `gpt-4o` | Uses native JSON mode. |
+| **Gemini** | `gemini-2.0-flash` | Uses native JSON mode. |
+| **Ollama** | `qwen2.5:14b` | Fully local, no API key, nothing leaves your machine. Weaker on code-mixed speech (e.g. Hinglish) than the hosted models. |
+
+Pick yours in the setup wizard. To use a different model, set `model` in
+`~/.config/beyondmeetings/config.toml` — model names change faster than this
+project releases, so the defaults are a starting point, not a constraint.
 
 Whichever you choose, the *files* are identical — the notes, task board and
 dashboard are written by deterministic Python, not by the model. The model
 only decides what the meeting was about. Swapping providers changes summary
 quality, never structure or correctness.
+
+### Fully local transcription
+
+Choose **whisper.cpp** in the wizard instead of Groq. You need to build the
+binary yourself once (it needs a compiler, so the installer won't do it
+silently):
+
+```bash
+git clone https://github.com/ggerganov/whisper.cpp
+cd whisper.cpp && cmake -B build && cmake --build build -j
+```
+
+Then set `whisper_binary` in your config if it isn't on `PATH`. The wizard
+downloads the model (~1.5 GB) for you.
 
 ---
 
@@ -106,6 +124,13 @@ The wizard generates `CLAUDE.md`, `AGENTS.md` and `GEMINI.md` in your vault, so
 Claude Code, Codex or Gemini CLI can start and stop recordings when you ask
 them to. All three files are generated from one template — edit the template,
 not the copies.
+
+It also offers to register an MCP server giving your agent read access to the
+vault, so you can ask things like "what did we decide about the API last week?"
+It uses `@modelcontextprotocol/server-filesystem` scoped to your vault — no
+Obsidian plugin and no second API key. Only agents you actually have installed
+are touched, and your existing agent config is merged, backed up to `.bak`, and
+never overwritten.
 
 ---
 

@@ -69,8 +69,8 @@ Four milestones, each independently useful. **Ships to GitHub after milestone 2.
 |---|---|---|---|
 | 1 | Engine | `start`/`stop` works end-to-end from a terminal, correct notes written | `[x]` code complete — 136 tests green; awaiting real-recording verification |
 | 2 | Wizard | `install.sh`, checklist UI, % ring — the installable experience | `[x]` code complete — 226 tests green |
-| 3 | Providers | GPT/Gemini/Ollama, whisper.cpp, MCP registration | `[~]` next |
-| 4 | App | Tray, full page, history, re-run notes | `[ ]` |
+| 3 | Providers | GPT/Gemini/Ollama, whisper.cpp, MCP registration | `[x]` code complete — 330 tests green |
+| 4 | App | Tray, full page, history, re-run notes | `[~]` next |
 
 ---
 
@@ -150,18 +150,38 @@ The generated `CLAUDE.md` / `AGENTS.md` / `GEMINI.md` land in the **vault root**
 
 ---
 
-### Milestone 3 — Providers `[ ]`
+### Milestone 3 — Providers `[x]` code complete
 
 **Goal:** provider choice is real, and MCP registration works per agent.
 
-- [ ] `llm/openai.py`
-- [ ] `llm/gemini.py`
-- [ ] `llm/ollama.py` (+ note weaker code-mixed handling in the picker)
-- [ ] `transcribe/whispercpp.py` + model download with progress
-- [ ] `mcp_setup.py` — filesystem-based Obsidian MCP into Claude Code / Codex / Gemini CLI configs
-- [ ] Skip-with-explanation when the chosen agent's CLI isn't installed
-- [ ] Provider picker in wizard, Claude pre-selected + *Recommended* badge
-- [ ] Tests: mocked HTTP per provider — request shape + JSON coercion
+- [x] `llm/factory.py` — `cli.py` no longer hardcodes Anthropic
+- [x] `llm/openai.py` — native JSON mode
+- [x] `llm/gemini.py` — native JSON mode; key in a header, never the query string
+- [x] `llm/ollama.py` — keyless; actionable errors for a stopped daemon and an un-pulled model
+- [x] `transcribe/whispercpp.py` + model download with progress
+- [x] `transcribe/factory.py` and `doctor/transcriber.py`
+- [x] `doctor/keys.py` — validators for OpenAI and Gemini; Ollama checks daemon + model instead of a key
+- [x] `mcp_setup.py` — filesystem MCP into Claude Code / Codex / Gemini CLI configs, merged atomically with a `.bak`
+- [x] `doctor/mcp.py` — skips with an explanation when no agent CLI is installed
+- [x] `doctor/choices.py` + wizard choice rows — Claude pre-selected with a *recommended* badge
+- [x] Tests: 330 passing
+- [x] Verified end-to-end: switching provider relabels the key row; switching to whisper.cpp **removes the Groq key row entirely**; MCP refuses without a vault, then registers into Claude Code while preserving existing config and writing a backup
+- [x] Verified `doctor` on this machine detects Claude Code as installed-but-unregistered
+
+#### Notable design decisions
+
+- **The Groq key stops being a prerequisite when local transcription is chosen.** The check registry is built from config, so irrelevant rows disappear rather than sitting there red.
+- **Ollama has no `fix()`.** The wizard cannot start a daemon or pull a 9 GB model on the user's behalf; it reports exactly what to run instead.
+- **MCP is `@modelcontextprotocol/server-filesystem` scoped to the vault**, not `mcp-obsidian` — the latter needs the Local REST API plugin installed *and* a second key copied out of it.
+- **`~/.claude.json` safety.** On this machine that file is 79 KB of real config. Registration merges, copies to `.bak`, and writes via a temp file + rename. A corrupt existing config is refused rather than overwritten. Four tests cover this.
+
+#### Known soft spot
+
+**Model defaults will go stale.** `gpt-4o`, `gemini-2.0-flash`, `qwen2.5:14b` and `claude-opus-5` are the current defaults, all overridable via `model` in config. Model names churn faster than this code will; a wrong value produces a clear API error rather than silent misbehaviour. Worth a review before release.
+
+#### Test updated rather than added
+
+`test_doctor_registry.py::test_registry_returns_checks_in_a_stable_order` pinned the old seven-row order and legitimately failed — the registry now returns eleven rows with choices first. `test_doctor_keys.py::test_unsupported_provider_explains_it_arrives_later` asserted OpenAI was unsupported, which milestone 3 made false. Both were replaced rather than deleted.
 
 ---
 
@@ -191,9 +211,8 @@ The generated `CLAUDE.md` / `AGENTS.md` / `GEMINI.md` land in the **vault root**
 ## 5. Known gaps carried forward
 
 - **Segment rollover has no timer yet.** `roll_segment()` is implemented and unit-tested, but nothing calls it on a schedule until the server's background loop in milestone 4. A meeting over 50 minutes still transcribes correctly (one long segment), it simply does not yet get the rate-limit spreading that B2 is ultimately about. **B2 is not fully closed until milestone 4.**
-- **Only Claude works as a note writer.** The other three providers land in milestone 3. `ProviderKeyCheck` returns a clear "arrives in milestone 3" message if one is selected, rather than storing a key that cannot be used.
-- **MCP registration (check 8) and the provider picker UI are deferred to milestone 3**, where the other providers land — a picker offering providers that cannot yet write notes would be a trap.
 - **Tray autostart (check 9) is deferred to milestone 4**, with the tray itself.
+- **No provider has been exercised against its real API.** All four adapters are tested with mocked HTTP — request shape and response parsing are verified, but no live call has ever been made. The first real key entered in the wizard is also the first real request.
 - **Milestone 1 has still not been verified with a real recording.** Deferred at the user's request to the end of milestone 2. This is the only part of the engine never exercised against real audio.
 
 ---
@@ -239,3 +258,4 @@ Append one line per session. Newest last.
 - **2026-07-30** — Milestone 1 plan written (`f0871b2`), then implemented on branch `milestone-1-engine`. 136 tests passing. Five bugs found and fixed during implementation (see milestone 1 section). Remaining: manual verification with a real recording.
 - **2026-07-30** — Python bootstrap strategy decided (system Python, `uv` fallback) and recorded in spec §11.
 - **2026-07-30** — Milestone 2 planned and implemented on the same branch. 226 tests passing. Wizard verified booting and driving its full fix flow against a throwaway vault; `doctor` verified against this machine at 50%. Remaining before GitHub: the three release blockers above, plus milestone 1's real-recording check.
+- **2026-07-30** — Milestone 3 planned and implemented. 330 tests passing. All four providers, whisper.cpp, both factories, and MCP registration done. Verified provider/transcriber switching reshapes the check list, and MCP registration preserves an existing `~/.claude.json`. Still outstanding: the real-recording test, and no provider has yet made a live API call.

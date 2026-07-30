@@ -20,8 +20,37 @@ def test_rules_not_required(tmp_path):
 
 def test_registry_returns_checks_in_a_stable_order(tmp_path):
     ids = [c.id for c in build_checks(Config(), config_path=tmp_path / "c.toml")]
-    assert ids == ["pipewire", "ffmpeg", "groq_key", "provider_key",
-                   "obsidian", "vault", "rules"]
+    assert ids == [
+        "provider_choice", "transcriber_choice",
+        "pipewire", "ffmpeg",
+        "groq_key", "provider_key", "whisper_model",
+        "obsidian", "vault", "rules", "mcp",
+    ]
+
+
+def test_choices_come_first_because_they_change_later_rows(tmp_path):
+    ids = [c.id for c in build_checks(Config(), config_path=tmp_path / "c.toml")]
+    assert ids[0].endswith("_choice") and ids[1].endswith("_choice")
+
+
+def test_groq_key_is_dropped_when_transcribing_locally(tmp_path):
+    """A Groq key is not a prerequisite if Groq is not being used."""
+    cfg = Config(transcriber="whispercpp")
+    ids = [c.id for c in build_checks(cfg, config_path=tmp_path / "c.toml")]
+    assert "groq_key" not in ids
+
+
+def test_groq_key_is_present_when_transcribing_with_groq(tmp_path):
+    cfg = Config(transcriber="groq")
+    ids = [c.id for c in build_checks(cfg, config_path=tmp_path / "c.toml")]
+    assert "groq_key" in ids
+
+
+def test_registry_handles_every_provider(tmp_path):
+    for provider in ("anthropic", "openai", "gemini", "ollama"):
+        cfg = Config(provider=provider)
+        ids = [c.id for c in build_checks(cfg, config_path=tmp_path / "c.toml")]
+        assert "provider_key" in ids
 
 
 def test_registry_uses_the_configured_provider(tmp_path):

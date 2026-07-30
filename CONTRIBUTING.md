@@ -55,13 +55,20 @@ not a model's guess. This is what lets any provider produce identical files.
 
 1. Add `llm/<name>.py` implementing `LLMProvider.analyse()`. Route the response
    through `parse_meeting_note()` — it handles fenced JSON, surrounding prose,
-   and validating `follow_up_of` against the supplied candidates.
+   and validating `follow_up_of` against the supplied candidates. Request JSON
+   natively if the API supports it.
 2. Add a display name to `labels.py`.
-3. Add a key validator to `doctor/keys.py` and register it in `VALIDATORS`.
-4. Test with `pytest-httpx`, asserting request shape and that malformed output
-   is repaired. See `tests/test_llm_anthropic.py`.
+3. Register the class in `llm/factory.py` (`KEYED`).
+4. Add a key validator to `doctor/keys.py` and register it in `VALIDATORS`.
+5. Add an entry to `PROVIDERS` in `doctor/choices.py` so it appears in the
+   wizard.
+6. Test with `pytest-httpx`, asserting request shape and that malformed output
+   is repaired. See `tests/test_llm_gemini.py`.
 
-Roughly forty lines.
+Roughly forty lines of implementation, five small registrations.
+
+Model defaults live at the top of each adapter. They will go stale — treat a
+PR bumping them as welcome housekeeping.
 
 ## Porting audio capture to another OS
 
