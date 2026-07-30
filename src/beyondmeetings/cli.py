@@ -16,10 +16,10 @@ from .audio.pipewire import PipeWireRecorder
 from .config import DEFAULT_CONFIG_PATH, load_config
 from .doctor.base import completion_percent, run_all
 from .doctor.registry import build_checks
-from .llm.anthropic import AnthropicProvider
+from .llm.factory import MissingKeyError, build_provider
 from .pipeline import generate_notes
-from .secrets import get_secret
-from .transcribe.groq import GroqTranscriber, compress_for_upload
+from .transcribe.factory import build_transcriber
+from .transcribe.groq import compress_for_upload
 
 
 def placeholder_name() -> str:
@@ -59,10 +59,10 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def _provider(config):
-    key = get_secret("anthropic_api_key")
-    if not key:
-        raise SystemExit("No Anthropic API key stored. Run `beyondmeetings setup`.")
-    return AnthropicProvider(api_key=key, model=config.model)
+    try:
+        return build_provider(config)
+    except (MissingKeyError, ValueError) as exc:
+        raise SystemExit(str(exc)) from exc
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -84,10 +84,10 @@ def main(argv: list[str] | None = None) -> int:
         except RuntimeError as exc:
             raise SystemExit(f"Nothing to stop — {exc}.") from exc
 
-        key = get_secret("groq_api_key")
-        if not key:
-            raise SystemExit("No Groq API key stored. Run `beyondmeetings setup`.")
-        transcriber = GroqTranscriber(api_key=key, language=config.spoken_language)
+        try:
+            transcriber = build_transcriber(config)
+        except (RuntimeError, ValueError, FileNotFoundError) as exc:
+            raise SystemExit(str(exc)) from exc
 
         parts = []
         for segment in state.segments:

@@ -21,6 +21,9 @@ class Config(BaseModel):
     projects: list[str] = Field(default_factory=list)
     segment_minutes: int = 50
     data_dir: str = str(DEFAULT_DATA_DIR)
+    ollama_host: str = "http://localhost:11434"
+    whisper_binary: str = ""
+    whisper_model: str = "medium.en"
 
 
 def load_config(path: Path | None = None) -> Config:
