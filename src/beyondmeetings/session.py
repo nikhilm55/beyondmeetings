@@ -27,6 +27,11 @@ TICK_SECONDS = 20
 BUSY_PHASES = ("stopping", "transcribing", "analysing")
 
 
+def placeholder_name(now: datetime | None = None) -> str:
+    """Name for an unnamed recording. Defined once — the CLI imports it."""
+    return (now or datetime.now()).strftime("recording-%H-%M")
+
+
 class SessionManager:
     def __init__(
         self,
@@ -99,7 +104,7 @@ class SessionManager:
         if self._phase in BUSY_PHASES:
             raise RuntimeError(f"still {self._phase} the previous meeting")
 
-        name = (name or "").strip() or self.clock().strftime("recording-%H-%M")
+        name = (name or "").strip() or placeholder_name(self.clock())
         with self._lock:
             self._error = None
             self._note_path = None

@@ -39,3 +39,52 @@ def test_stop_without_a_recording_exits_cleanly(tmp_path, monkeypatch, capsys):
     with pytest.raises(SystemExit) as exc:
         cli.main(["stop"])
     assert "Nothing to stop" in str(exc.value)
+
+
+# --- Review finding #1: cli stop and the app were two divergent pipelines ---
+
+def test_cli_stop_delegates_to_the_shared_session(monkeypatch, tmp_path, capsys):
+    """There must be exactly one stop implementation."""
+    import pytest
+
+    from beyondmeetings import cli
+    from beyondmeetings.config import Config
+
+    calls = []
+
+    class FakeSession:
+        def run_stop(self):
+            calls.append("run_stop")
+            return {"phase": "done", "note_path": "/v/Meetings/2026-07-30/N.md",
+                    "transcript_path": "/d/t.txt", "error": None}
+
+    monkeypatch.setattr(cli, "load_config", lambda: Config(data_dir=str(tmp_path)))
+    monkeypatch.setattr(cli, "_session", lambda c, d: FakeSession())
+    assert cli.main(["stop"]) == 0
+    assert calls == ["run_stop"]
+    assert "Note written" in capsys.readouterr().out
+
+
+def test_cli_stop_reports_a_failed_stop_with_the_transcript_path(monkeypatch,
+                                                                 tmp_path, capsys):
+    import pytest
+
+    from beyondmeetings import cli
+    from beyondmeetings.config import Config
+
+    class FakeSession:
+        def run_stop(self):
+            return {"phase": "failed", "note_path": None,
+                    "transcript_path": "/d/t.txt", "error": "api down"}
+
+    monkeypatch.setattr(cli, "load_config", lambda: Config(data_dir=str(tmp_path)))
+    monkeypatch.setattr(cli, "_session", lambda c, d: FakeSession())
+    with pytest.raises(SystemExit, match="api down"):
+        cli.main(["stop"])
+    assert "/d/t.txt" in capsys.readouterr().out
+
+
+def test_placeholder_name_is_defined_once():
+    """cli re-exports session's, rather than repeating the rule."""
+    from beyondmeetings import cli, session
+    assert cli.placeholder_name is session.placeholder_name

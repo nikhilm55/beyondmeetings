@@ -9,7 +9,6 @@ from __future__ import annotations
 import argparse
 import sys
 import webbrowser
-from datetime import datetime
 from pathlib import Path
 
 from .audio.pipewire import PipeWireRecorder
@@ -18,12 +17,8 @@ from .doctor.base import completion_percent, run_all
 from .doctor.registry import build_checks
 from .llm.factory import MissingKeyError, build_provider
 from .pipeline import generate_notes
+from .session import SessionManager, placeholder_name  # noqa: F401 (re-exported)
 from .transcribe.factory import build_transcriber
-from .transcribe.groq import compress_for_upload
-
-
-def placeholder_name() -> str:
-    return datetime.now().strftime("recording-%H-%M")
 
 
 def format_doctor_report(rows: list[dict]) -> str:
@@ -70,48 +65,45 @@ def _provider(config):
         raise SystemExit(str(exc)) from exc
 
 
+def _session(config, data_dir: Path) -> SessionManager:
+    """One stop pipeline, shared with the app.
+
+    These were once two independent implementations and they diverged — only
+    one compressed audio before upload, and only one used the segment cache.
+    """
+    return SessionManager(
+        config=config,
+        recorder=PipeWireRecorder(data_dir, segment_minutes=config.segment_minutes),
+        transcriber_factory=build_transcriber,
+        provider_factory=build_provider,
+    )
+
+
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     config = load_config()
     data_dir = Path(config.data_dir)
 
     if args.command == "start":
-        name = args.name or placeholder_name()
-        recorder = PipeWireRecorder(data_dir, segment_minutes=config.segment_minutes)
-        state = recorder.start(name)
-        print(f"Recording started: {state.name}")
+        try:
+            status = _session(config, data_dir).start(args.name or "")
+        except RuntimeError as exc:
+            raise SystemExit(str(exc)) from exc
+        print(f"Recording started: {status['name']}")
         return 0
 
     if args.command == "stop":
-        recorder = PipeWireRecorder(data_dir, segment_minutes=config.segment_minutes)
+        session = _session(config, data_dir)
         try:
-            state = recorder.stop()
+            status = session.run_stop()
         except RuntimeError as exc:
             raise SystemExit(f"Nothing to stop — {exc}.") from exc
 
-        try:
-            transcriber = build_transcriber(config)
-        except (RuntimeError, ValueError, FileNotFoundError) as exc:
-            raise SystemExit(str(exc)) from exc
-
-        parts = []
-        for segment in state.segments:
-            source = Path(segment)
-            if not source.exists():
-                continue
-            mp3 = source.with_suffix(".mp3")
-            compress_for_upload(source, mp3)
-            parts.append(transcriber.transcribe_file(mp3))
-
-        transcript = "\n".join(parts)
-        folder = data_dir / "transcripts" / state.date
-        folder.mkdir(parents=True, exist_ok=True)
-        transcript_path = folder / f"{state.filename_base}.txt"
-        transcript_path.write_text(transcript, encoding="utf-8")
-        print(f"Transcript: {transcript_path}")
-
-        path = generate_notes(transcript, config, _provider(config), state.date)
-        print(f"Note written: {path}")
+        if status["transcript_path"]:
+            print(f"Transcript: {status['transcript_path']}")
+        if status["phase"] == "failed":
+            raise SystemExit(status["error"] or "Stop failed.")
+        print(f"Note written: {status['note_path']}")
         return 0
 
     if args.command == "notes":
