@@ -32,6 +32,7 @@ class Check(ABC):
     description: str = ""
     required: bool = True
     inputs: list[InputField] = []
+    choices: list[dict] = []
 
     @abstractmethod
     def detect(self) -> CheckResult:
@@ -62,6 +63,7 @@ def run_all(checks: list[Check]) -> list[dict]:
                 "required": check.required,
                 "fixable": check.fixable,
                 "inputs": [i.model_dump() for i in check.inputs],
+                "choices": list(check.choices),
             }
         )
     return rows

@@ -99,7 +99,9 @@ def test_provider_check_rejects_unknown_provider(tmp_path):
         ProviderKeyCheck(provider="nope", secret_dir=tmp_path)
 
 
-def test_unsupported_provider_explains_it_arrives_later(tmp_path, file_secrets):
-    check = ProviderKeyCheck(provider="openai", secret_dir=tmp_path)
-    result = check.fix(api_key="sk-whatever")
-    assert "milestone 3" in result.detail
+def test_every_provider_now_has_a_working_check(tmp_path, file_secrets):
+    """Was: asserted OpenAI is unsupported. Milestone 3 made that false."""
+    for provider in ("anthropic", "openai", "gemini", "ollama"):
+        check = ProviderKeyCheck(provider=provider, secret_dir=tmp_path)
+        assert check.label
+        assert "milestone" not in check.description.lower()

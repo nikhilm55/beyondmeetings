@@ -5,10 +5,13 @@ from pathlib import Path
 
 from ..config import DEFAULT_CONFIG_PATH, Config
 from .base import Check
+from .choices import ProviderChoice, TranscriberChoice
 from .keys import GroqKeyCheck, ProviderKeyCheck
+from .mcp import McpCheck
 from .obsidian import ObsidianCheck
 from .rules_check import RulesCheck
 from .system import FfmpegCheck, PipeWireCheck
+from .transcriber import WhisperModelCheck
 from .vault import VaultCheck
 
 
@@ -19,12 +22,29 @@ def build_checks(
 ) -> list[Check]:
     config_path = Path(config_path or DEFAULT_CONFIG_PATH)
     rules_dir = Path(config.vault_path) if config.vault_path else config_path.parent
-    return [
+    checks: list[Check] = [
+        # Choices first — they change what the rows below mean.
+        ProviderChoice(config, config_path=config_path),
+        TranscriberChoice(config, config_path=config_path),
         PipeWireCheck(),
         FfmpegCheck(),
-        GroqKeyCheck(secret_dir=secret_dir),
-        ProviderKeyCheck(provider=config.provider, secret_dir=secret_dir),
+    ]
+
+    # The Groq key is only a prerequisite when Groq is doing the transcribing.
+    if config.transcriber == "groq":
+        checks.append(GroqKeyCheck(secret_dir=secret_dir))
+
+    checks += [
+        ProviderKeyCheck(
+            provider=config.provider,
+            secret_dir=secret_dir,
+            ollama_host=config.ollama_host,
+            model=config.model,
+        ),
+        WhisperModelCheck(config),
         ObsidianCheck(),
         VaultCheck(config, config_path=config_path),
         RulesCheck(config, target_dir=rules_dir),
+        McpCheck(config),
     ]
+    return checks

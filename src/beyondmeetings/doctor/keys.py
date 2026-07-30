@@ -61,11 +61,60 @@ def validate_anthropic_key(api_key: str) -> tuple[bool, str]:
     return False, _error_detail(response)
 
 
-# None means "recognised provider, adapter arrives in milestone 3".
+def validate_openai_key(api_key: str) -> tuple[bool, str]:
+    try:
+        response = httpx.get(
+            "https://api.openai.com/v1/models",
+            headers={"Authorization": f"Bearer {api_key}"},
+            timeout=TIMEOUT,
+        )
+    except httpx.HTTPError as exc:
+        return False, f"Could not reach OpenAI: {exc}"
+    if response.status_code == 200:
+        return True, ""
+    return False, _error_detail(response)
+
+
+def validate_gemini_key(api_key: str) -> tuple[bool, str]:
+    try:
+        response = httpx.get(
+            "https://generativelanguage.googleapis.com/v1beta/models",
+            headers={"x-goog-api-key": api_key},
+            timeout=TIMEOUT,
+        )
+    except httpx.HTTPError as exc:
+        return False, f"Could not reach Gemini: {exc}"
+    if response.status_code == 200:
+        return True, ""
+    return False, _error_detail(response)
+
+
+def validate_ollama(host: str, model: str) -> tuple[bool, str]:
+    """Ollama has no key — check the daemon is up and the model is pulled."""
+    try:
+        response = httpx.get(f"{host.rstrip('/')}/api/tags", timeout=TIMEOUT)
+    except httpx.HTTPError as exc:
+        return False, (
+            f"Could not reach Ollama at {host} ({exc}). Start it with `ollama serve`."
+        )
+    if response.status_code != 200:
+        return False, _error_detail(response)
+
+    names = [m.get("name", "") for m in response.json().get("models", [])]
+    if model not in names:
+        available = ", ".join(n for n in names if n) or "none"
+        return False, (
+            f"Model '{model}' is not pulled. Run `ollama pull {model}`. "
+            f"Available: {available}."
+        )
+    return True, ""
+
+
+# Ollama is keyless and handled separately in ProviderKeyCheck.
 VALIDATORS = {
     "anthropic": validate_anthropic_key,
-    "openai": None,
-    "gemini": None,
+    "openai": validate_openai_key,
+    "gemini": validate_gemini_key,
     "ollama": None,
 }
 
@@ -121,27 +170,56 @@ class ProviderKeyCheck(_KeyCheck):
     id = "provider_key"
     description = "Writes your meeting notes."
 
-    def __init__(self, provider: str, secret_dir: Path | None = None):
+    def __init__(
+        self,
+        provider: str,
+        secret_dir: Path | None = None,
+        ollama_host: str = "http://localhost:11434",
+        model: str = "",
+    ):
         if provider not in VALIDATORS:
             raise ValueError(f"unknown provider: {provider}")
         super().__init__(secret_dir)
         self.provider = provider
         self.secret_name = f"{provider}_api_key"
-        self.label = f"{provider_label(provider)} API key"
-        self.inputs = [
-            InputField(
-                name="api_key",
-                label=f"{provider_label(provider)} API key",
-                placeholder="sk-…",
-                secret=True,
-            )
-        ]
+        self.ollama_host = ollama_host
+        self.model = model
+
+        if provider == "ollama":
+            self.label = "Ollama (local)"
+            self.description = "Runs on your machine. No API key needed."
+            self.inputs = []
+        else:
+            self.label = f"{provider_label(provider)} API key"
+            self.inputs = [
+                InputField(
+                    name="api_key",
+                    label=f"{provider_label(provider)} API key",
+                    placeholder="sk-…",
+                    secret=True,
+                )
+            ]
+
+    def _ollama_model(self) -> str:
+        from ..llm.ollama import DEFAULT_MODEL
+
+        return self.model or DEFAULT_MODEL
+
+    def detect(self) -> CheckResult:
+        if self.provider == "ollama":
+            ok, detail = validate_ollama(self.ollama_host, self._ollama_model())
+            if ok:
+                return CheckResult(
+                    status="ok", detail=f"{self._ollama_model()} available locally"
+                )
+            return CheckResult(status="missing", detail=detail)
+        return super().detect()
+
+    @property
+    def fixable(self) -> bool:
+        # Nothing to fix from here for Ollama — the user must start the daemon
+        # or pull the model themselves.
+        return self.provider != "ollama"
 
     def _validate(self, api_key: str) -> tuple[bool, str]:
-        validator = VALIDATORS[self.provider]
-        if validator is None:
-            return False, (
-                f"{provider_label(self.provider)} is not supported yet — "
-                "it arrives in milestone 3."
-            )
-        return validator(api_key)
+        return VALIDATORS[self.provider](api_key)
