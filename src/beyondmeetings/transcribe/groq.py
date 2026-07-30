@@ -106,18 +106,46 @@ class GroqTranscriber(Transcriber):
             small = compress_for_upload(audio, Path(tmp) / f"{audio.stem}.mp3")
             return self._transcribe_prepared(small)
 
+    def _try_model(self, audio: Path, model: str) -> tuple[str | None, str, bool]:
+        """Attempt one model. Returns (transcript, last_error, try_next_model).
+
+        Split out because the retry rules differ per status and the nested-loop
+        version was hard to read: a 4xx is deterministic and must not be
+        retried, but a 404 means *this* model is unavailable and the fallback
+        is still worth trying.
+        """
+        last = ""
+        for attempt in range(1, self.max_attempts + 1):
+            response = self._post(audio, model)
+            if response.status_code == 200:
+                return response.text.strip(), "", False
+
+            last = f"HTTP {response.status_code}: {response.text[:200]}"
+            status = response.status_code
+
+            if status == 429:
+                time.sleep(parse_retry_after(response.headers.get("retry-after")))
+                continue
+
+            if status == 404:
+                return None, last, True  # model gone; the other one may exist
+
+            if 400 <= status < 500:
+                # Same file, same rejection. Retrying used to burn ~36s of
+                # silent sleeping before reporting what the first call said.
+                return None, last, False
+
+            time.sleep(self.backoff_base * attempt)
+
+        return None, last, True  # exhausted retries; fall back to the next model
+
     def _transcribe_prepared(self, audio: Path) -> str:
         last = ""
         for model in MODELS:
-            for attempt in range(1, self.max_attempts + 1):
-                response = self._post(audio, model)
-                if response.status_code == 200:
-                    return response.text.strip()
+            transcript, last, try_next = self._try_model(audio, model)
+            if transcript is not None:
+                return transcript
+            if not try_next:
+                break
 
-                last = f"HTTP {response.status_code}: {response.text[:200]}"
-                if response.status_code == 429:
-                    time.sleep(parse_retry_after(response.headers.get("retry-after")))
-                    continue
-                time.sleep(self.backoff_base * attempt)
-
-        raise RuntimeError(f"Groq transcription failed after all retries — {last}")
+        raise RuntimeError(f"Groq transcription failed — {last}")

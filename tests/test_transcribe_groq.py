@@ -146,3 +146,46 @@ def test_retry_after_that_is_not_a_number_falls_back(httpx_mock, tmp_path,
     mp3.write_bytes(b"ID3")
     assert GroqTranscriber(api_key="gsk").transcribe_file(mp3) == "ok"
     assert slept and slept[0] > 0
+
+
+# --- A deterministic 4xx used to be retried, silently, for ~36 seconds ---
+
+def test_a_400_is_not_retried(httpx_mock, tmp_path, monkeypatch):
+    slept = []
+    monkeypatch.setattr("time.sleep", slept.append)
+    httpx_mock.add_response(status_code=400, text="invalid audio file")
+    mp3 = tmp_path / "a.mp3"
+    mp3.write_bytes(b"ID3")
+    with pytest.raises(RuntimeError, match="400"):
+        GroqTranscriber(api_key="gsk").transcribe_file(mp3)
+    assert len(httpx_mock.get_requests()) == 1, "a 4xx must not be retried"
+    assert slept == [], "and must not sleep"
+
+
+def test_a_400_does_not_try_the_fallback_model(httpx_mock, tmp_path):
+    httpx_mock.add_response(status_code=413, text="file too large")
+    mp3 = tmp_path / "a.mp3"
+    mp3.write_bytes(b"ID3")
+    with pytest.raises(RuntimeError, match="413"):
+        GroqTranscriber(api_key="gsk").transcribe_file(mp3)
+    assert len(httpx_mock.get_requests()) == 1
+
+
+def test_a_404_does_try_the_fallback_model(httpx_mock, tmp_path):
+    """A missing model is the one 4xx where the other model may still work."""
+    httpx_mock.add_response(status_code=404, text="model not found")
+    httpx_mock.add_response(text="recovered on the fallback")
+    mp3 = tmp_path / "a.mp3"
+    mp3.write_bytes(b"ID3")
+    result = GroqTranscriber(api_key="gsk").transcribe_file(mp3)
+    assert result == "recovered on the fallback"
+
+
+def test_a_5xx_is_still_retried(httpx_mock, tmp_path, monkeypatch):
+    """Transient server errors are exactly what backoff is for."""
+    monkeypatch.setattr("time.sleep", lambda s: None)
+    httpx_mock.add_response(status_code=503, text="unavailable")
+    httpx_mock.add_response(text="ok on retry")
+    mp3 = tmp_path / "a.mp3"
+    mp3.write_bytes(b"ID3")
+    assert GroqTranscriber(api_key="gsk").transcribe_file(mp3) == "ok on retry"

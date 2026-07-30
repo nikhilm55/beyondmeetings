@@ -21,6 +21,9 @@ from .session import SessionManager, placeholder_name  # noqa: F401 (re-exported
 from .transcribe.factory import build_transcriber
 
 
+AUDIO_SUFFIXES = {".wav", ".mp3", ".m4a", ".ogg", ".opus", ".flac", ".webm"}
+
+
 def format_doctor_report(rows: list[dict]) -> str:
     lines = [f"beyondMeetings — {completion_percent(rows)}% ready", ""]
     for row in rows:
@@ -41,8 +44,10 @@ def build_parser() -> argparse.ArgumentParser:
 
     sub.add_parser("stop", help="stop, transcribe and write notes")
 
-    notes = sub.add_parser("notes", help="regenerate notes from a transcript")
-    notes.add_argument("transcript")
+    notes = sub.add_parser(
+        "notes", help="write notes from a saved transcript or recording"
+    )
+    notes.add_argument("transcript", help="a .txt transcript or a .wav/.mp3 recording")
 
     sub.add_parser("doctor", help="check prerequisites")
 
@@ -94,6 +99,12 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "stop":
         session = _session(config, data_dir)
+        # Without this the terminal sits silent through compression, upload and
+        # analysis. A user watching nothing happen assumes a hang and kills it,
+        # which is exactly what happened on a 32-minute recording.
+        session.on_phase_change = lambda phase: print(
+            f"  {session.status()['detail'] or phase}…", flush=True
+        )
         try:
             status = session.run_stop()
         except RuntimeError as exc:
@@ -107,7 +118,25 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     if args.command == "notes":
-        transcript = Path(args.transcript).read_text(encoding="utf-8")
+        source = Path(args.transcript).expanduser()
+        if not source.is_file():
+            raise SystemExit(f"No such file: {source}")
+
+        if source.suffix.lower() in AUDIO_SUFFIXES:
+            # Recovery path: an interrupted stop leaves audio with no
+            # transcript, and previously nothing could pick it back up.
+            from .segments import transcribe_segment
+
+            try:
+                transcriber = build_transcriber(config)
+            except (RuntimeError, ValueError, FileNotFoundError) as exc:
+                raise SystemExit(str(exc)) from exc
+            print("  Transcribing (cached segments are reused)…", flush=True)
+            transcript = transcribe_segment(source, transcriber)
+        else:
+            transcript = source.read_text(encoding="utf-8")
+
+        print("  Writing notes…", flush=True)
         path = generate_notes(transcript, config, _provider(config))
         print(f"Note written: {path}")
         return 0
