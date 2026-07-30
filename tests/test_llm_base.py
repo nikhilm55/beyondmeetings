@@ -45,3 +45,29 @@ def test_raises_when_no_json_present():
 def test_raises_when_required_field_missing():
     with pytest.raises(ResponseParseError):
         parse_meeting_note('{"title": "No summary or date"}')
+
+
+# --- Review finding #7: the schema-echo case picked the wrong block ---
+
+def test_prefers_a_real_note_over_an_echoed_schema():
+    """Some models restate the schema in one fence and answer in the next."""
+    raw = (
+        "Here is the schema I used:\n"
+        '```json\n{"title": "string", "date": "YYYY-MM-DD"}\n```\n'
+        "And the note:\n"
+        f"```json\n{VALID}\n```\n"
+    )
+    assert parse_meeting_note(raw).title == "Standup"
+
+
+def test_falls_through_to_the_bare_text_when_no_fence_parses():
+    assert parse_meeting_note(f"```\nnot json at all\n```\n{VALID}").title == "Standup"
+
+
+def test_uppercase_fence_language_is_handled():
+    assert parse_meeting_note(f"```JSON\n{VALID}\n```").title == "Standup"
+
+
+def test_error_message_does_not_claim_to_repair():
+    with pytest.raises(ResponseParseError, match="could not read a meeting note"):
+        parse_meeting_note('{"title": "no summary or date"}')

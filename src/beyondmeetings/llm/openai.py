@@ -8,7 +8,8 @@ from __future__ import annotations
 import httpx
 
 from ..models import MeetingNote
-from .base import LLMProvider, parse_meeting_note
+from .base import LLMProvider, ResponseParseError, parse_meeting_note
+from .http import TruncatedResponseError, raise_for_status
 
 API_URL = "https://api.openai.com/v1/chat/completions"
 DEFAULT_MODEL = "gpt-4o"
@@ -18,7 +19,7 @@ SYSTEM = "You analyse meeting transcripts and reply with a single JSON object."
 
 
 class OpenAIProvider(LLMProvider):
-    def __init__(self, api_key: str, model: str = "", max_tokens: int = 8000):
+    def __init__(self, api_key: str, model: str = "", max_tokens: int = 16000):
         self.api_key = api_key
         self.model = model or DEFAULT_MODEL
         self.max_tokens = max_tokens
@@ -43,10 +44,19 @@ class OpenAIProvider(LLMProvider):
                 ],
             },
         )
-        if response.status_code != 200:
-            detail = response.json().get("error", {}).get("message", response.text)
-            raise RuntimeError(f"OpenAI API error {response.status_code}: {detail}")
+        raise_for_status("OpenAI", response)
 
-        choices = response.json().get("choices", [])
-        text = choices[0]["message"]["content"] if choices else ""
-        return parse_meeting_note(text, valid_candidate_ids)
+        choices = response.json().get("choices") or []
+        if not choices:
+            raise ResponseParseError("OpenAI returned no choices.")
+
+        choice = choices[0]
+        if choice.get("finish_reason") == "length":
+            raise TruncatedResponseError("OpenAI", self.max_tokens)
+
+        message = choice.get("message") or {}
+        # A refusal sets content to null and populates `refusal` instead.
+        if message.get("refusal"):
+            raise ResponseParseError(f"OpenAI refused: {message['refusal']}")
+
+        return parse_meeting_note(message.get("content") or "", valid_candidate_ids)

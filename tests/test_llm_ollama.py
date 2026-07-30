@@ -62,3 +62,37 @@ def test_unparseable_content_raises_parse_error(httpx_mock):
 
 def test_default_model_is_reported_on_the_instance():
     assert OllamaProvider().model
+
+
+# --- Review finding #10: silent context truncation ---
+
+def test_num_ctx_is_sent_explicitly(httpx_mock):
+    """Ollama's 4096 default would drop most of an hour-long meeting."""
+    httpx_mock.add_response(json=BODY)
+    OllamaProvider().analyse("prompt")
+    payload = json.loads(httpx_mock.get_requests()[0].content)
+    assert payload["options"]["num_ctx"] >= 32768
+
+
+def test_an_oversized_prompt_is_refused_rather_than_truncated():
+    """A silently truncated transcript yields a confident, wrong note."""
+    provider = OllamaProvider(num_ctx=4096)
+    with pytest.raises(RuntimeError, match="silently drop"):
+        provider.analyse("x" * 200_000)
+
+
+def test_the_refusal_names_both_numbers():
+    provider = OllamaProvider(num_ctx=4096)
+    with pytest.raises(RuntimeError, match="4,096"):
+        provider.analyse("x" * 200_000)
+
+
+def test_a_prompt_within_the_window_is_sent(httpx_mock):
+    httpx_mock.add_response(json=BODY)
+    assert OllamaProvider(num_ctx=32768).analyse("x" * 1000).title == "Standup"
+
+
+def test_html_error_body_reports_the_status_code(httpx_mock):
+    httpx_mock.add_response(status_code=502, text="<html>Bad Gateway</html>")
+    with pytest.raises(RuntimeError, match="502"):
+        OllamaProvider().analyse("prompt")

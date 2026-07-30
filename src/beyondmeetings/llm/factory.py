@@ -27,7 +27,11 @@ def build_provider(config: Config) -> LLMProvider:
     name = config.provider
 
     if name == "ollama":
-        return OllamaProvider(model=config.model, host=config.ollama_host)
+        return OllamaProvider(
+            model=config.model,
+            host=config.ollama_host,
+            num_ctx=config.ollama_num_ctx,
+        )
 
     cls = KEYED.get(name)
     if cls is None:

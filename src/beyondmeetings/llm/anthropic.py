@@ -5,6 +5,7 @@ import httpx
 
 from ..models import MeetingNote
 from .base import LLMProvider, parse_meeting_note
+from .http import TruncatedResponseError, raise_for_status
 
 API_URL = "https://api.anthropic.com/v1/messages"
 DEFAULT_MODEL = "claude-opus-5"
@@ -12,7 +13,7 @@ TIMEOUT = 300.0
 
 
 class AnthropicProvider(LLMProvider):
-    def __init__(self, api_key: str, model: str = "", max_tokens: int = 8000):
+    def __init__(self, api_key: str, model: str = "", max_tokens: int = 16000):
         self.api_key = api_key
         self.model = model or DEFAULT_MODEL
         self.max_tokens = max_tokens
@@ -34,10 +35,14 @@ class AnthropicProvider(LLMProvider):
                 "messages": [{"role": "user", "content": prompt}],
             },
         )
-        if response.status_code != 200:
-            detail = response.json().get("error", {}).get("message", response.text)
-            raise RuntimeError(f"Anthropic API error {response.status_code}: {detail}")
+        raise_for_status("Anthropic", response)
 
-        blocks = response.json().get("content", [])
-        text = "".join(b.get("text", "") for b in blocks if b.get("type") == "text")
+        payload = response.json()
+        if payload.get("stop_reason") == "max_tokens":
+            raise TruncatedResponseError("Anthropic", self.max_tokens)
+
+        blocks = payload.get("content") or []
+        text = "".join(
+            b.get("text") or "" for b in blocks if b.get("type") == "text"
+        )
         return parse_meeting_note(text, valid_candidate_ids)

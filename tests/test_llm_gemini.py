@@ -61,3 +61,39 @@ def test_empty_candidates_raises_parse_error(httpx_mock):
     httpx_mock.add_response(json={"candidates": []})
     with pytest.raises(ResponseParseError):
         GeminiProvider(api_key="k").analyse("prompt")
+
+
+# --- Review finding #7: realistic responses crashed the adapter ---
+
+def test_safety_block_raises_a_parse_error_not_a_key_error(httpx_mock):
+    """A blocked candidate omits `content` entirely."""
+    httpx_mock.add_response(json={"candidates": [{"finishReason": "SAFETY"}]})
+    with pytest.raises(ResponseParseError, match="SAFETY"):
+        GeminiProvider(api_key="k").analyse("prompt")
+
+
+def test_safety_block_explains_why_transcripts_trigger_it(httpx_mock):
+    httpx_mock.add_response(json={"candidates": [{"finishReason": "SAFETY"}]})
+    with pytest.raises(ResponseParseError, match="personnel or health"):
+        GeminiProvider(api_key="k").analyse("prompt")
+
+
+def test_truncated_output_is_reported_as_truncation(httpx_mock):
+    httpx_mock.add_response(json={"candidates": [{
+        "finishReason": "MAX_TOKENS",
+        "content": {"parts": [{"text": '{"title": "Half'}]},
+    }]})
+    with pytest.raises(RuntimeError, match="output limit"):
+        GeminiProvider(api_key="k").analyse("prompt")
+
+
+def test_prompt_block_names_the_reason(httpx_mock):
+    httpx_mock.add_response(json={"promptFeedback": {"blockReason": "OTHER"}})
+    with pytest.raises(ResponseParseError, match="OTHER"):
+        GeminiProvider(api_key="k").analyse("prompt")
+
+
+def test_html_error_body_reports_the_status_code(httpx_mock):
+    httpx_mock.add_response(status_code=502, text="<html>Bad Gateway</html>")
+    with pytest.raises(RuntimeError, match="502"):
+        GeminiProvider(api_key="k").analyse("prompt")

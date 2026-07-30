@@ -22,6 +22,7 @@ class Config(BaseModel):
     segment_minutes: int = 50
     data_dir: str = str(DEFAULT_DATA_DIR)
     ollama_host: str = "http://localhost:11434"
+    ollama_num_ctx: int = 32768
     whisper_binary: str = ""
     whisper_model: str = "medium.en"
 

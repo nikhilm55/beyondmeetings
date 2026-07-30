@@ -1,7 +1,8 @@
 """Provider interface and response parsing.
 
-Providers vary in how faithfully they honour "return only JSON". Repair
-lives here so every adapter benefits and none reimplements it.
+Providers vary in how faithfully they honour "return only JSON". Extraction
+lives here so every adapter benefits and none reimplements it. Note that this
+is extraction, not repair — malformed JSON is reported, never patched up.
 """
 from __future__ import annotations
 
@@ -17,20 +18,35 @@ class ResponseParseError(RuntimeError):
     """The model's output could not be coerced into a MeetingNote."""
 
 
-def _extract_json_object(raw: str) -> str:
+def _json_candidates(raw: str) -> list[str]:
+    """Every plausible JSON object in the output, best guess last.
+
+    Models sometimes echo the schema in one fenced block and answer in the
+    next, so a single "first block wins" rule picked the schema. Each
+    candidate is tried in turn instead.
+    """
     text = raw.strip()
+    candidates: list[str] = []
+
     if "```" in text:
         blocks = text.split("```")
         for block in blocks[1::2]:
-            candidate = block.split("\n", 1)[-1] if block.startswith("json") else block
-            if "{" in candidate:
-                text = candidate
-                break
-    start = text.find("{")
-    end = text.rfind("}")
-    if start == -1 or end == -1 or end < start:
-        raise ResponseParseError(f"no JSON object found in model output: {raw[:200]!r}")
-    return text[start : end + 1]
+            body = block
+            first, _, rest = block.partition("\n")
+            if first.strip().lower() in {"json", "json5", "jsonc"}:
+                body = rest
+            if "{" in body:
+                candidates.append(body)
+
+    candidates.append(text)
+
+    extracted = []
+    for candidate in candidates:
+        start = candidate.find("{")
+        end = candidate.rfind("}")
+        if start != -1 and end > start:
+            extracted.append(candidate[start : end + 1])
+    return extracted
 
 
 def parse_meeting_note(
@@ -42,16 +58,25 @@ def parse_meeting_note(
     supplied in the prompt — the model cannot invent a link to a note that
     does not exist.
     """
-    payload = _extract_json_object(raw)
-    try:
-        data = json.loads(payload)
-    except json.JSONDecodeError as exc:
-        raise ResponseParseError(f"invalid JSON from model: {exc}") from exc
+    candidates = _json_candidates(raw)
+    if not candidates:
+        raise ResponseParseError(
+            f"no JSON object found in model output: {raw[:200]!r}"
+        )
 
-    try:
-        note = MeetingNote(**data)
-    except ValidationError as exc:
-        raise ResponseParseError(f"model output failed validation: {exc}") from exc
+    note = None
+    last_error: Exception | None = None
+    for payload in candidates:
+        try:
+            note = MeetingNote(**json.loads(payload))
+            break
+        except (json.JSONDecodeError, ValidationError, TypeError) as exc:
+            last_error = exc
+
+    if note is None:
+        raise ResponseParseError(
+            f"could not read a meeting note from the model's output: {last_error}"
+        )
 
     if note.follow_up_of and valid_candidate_ids is not None:
         if note.follow_up_of not in valid_candidate_ids:

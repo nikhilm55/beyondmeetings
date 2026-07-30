@@ -42,3 +42,29 @@ def test_unparseable_content_raises_parse_error(httpx_mock):
     httpx_mock.add_response(json={"content": [{"type": "text", "text": "sorry"}]})
     with pytest.raises(ResponseParseError):
         AnthropicProvider(api_key="sk-test").analyse("prompt")
+
+
+# --- Review finding #7 ---
+
+def test_truncated_output_is_reported_as_truncation(httpx_mock):
+    httpx_mock.add_response(json={
+        "stop_reason": "max_tokens",
+        "content": [{"type": "text", "text": '{"title": "Half a not'}],
+    })
+    with pytest.raises(RuntimeError, match="output limit"):
+        AnthropicProvider(api_key="sk-test").analyse("prompt")
+
+
+def test_html_error_body_reports_the_status_code(httpx_mock):
+    httpx_mock.add_response(status_code=502, text="<html><h1>Bad Gateway</h1></html>")
+    with pytest.raises(RuntimeError, match="502"):
+        AnthropicProvider(api_key="sk-test").analyse("prompt")
+
+
+def test_null_text_in_a_block_does_not_crash(httpx_mock):
+    httpx_mock.add_response(json={"content": [
+        {"type": "text", "text": None},
+        {"type": "text", "text": '{"title": "T", "date": "2026-07-30", '
+                                 '"executive_summary": "x"}'},
+    ]})
+    assert AnthropicProvider(api_key="sk-test").analyse("p").title == "T"

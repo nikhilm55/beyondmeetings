@@ -52,3 +52,36 @@ def test_candidate_ids_are_enforced(httpx_mock):
     httpx_mock.add_response(json={"choices": [{"message": {"content": raw}}]})
     note = OpenAIProvider(api_key="sk-t").analyse("p", valid_candidate_ids=[])
     assert note.follow_up_of is None
+
+
+# --- Review finding #7: realistic responses crashed the adapter ---
+
+def test_refusal_raises_a_parse_error_not_an_attribute_error(httpx_mock):
+    """A refusal sets content to null; .strip() on None crashed."""
+    httpx_mock.add_response(json={"choices": [{
+        "message": {"content": None, "refusal": "I can't help with that"},
+        "finish_reason": "stop",
+    }]})
+    with pytest.raises(ResponseParseError, match="refused"):
+        OpenAIProvider(api_key="sk-t").analyse("prompt")
+
+
+def test_truncated_output_is_reported_as_truncation(httpx_mock):
+    httpx_mock.add_response(json={"choices": [{
+        "message": {"content": '{"title": "Half a no'},
+        "finish_reason": "length",
+    }]})
+    with pytest.raises(RuntimeError, match="output limit"):
+        OpenAIProvider(api_key="sk-t").analyse("prompt")
+
+
+def test_html_error_body_reports_the_status_code(httpx_mock):
+    httpx_mock.add_response(status_code=502, text="<html><h1>Bad Gateway</h1></html>")
+    with pytest.raises(RuntimeError, match="502"):
+        OpenAIProvider(api_key="sk-t").analyse("prompt")
+
+
+def test_empty_choices_raises_a_parse_error(httpx_mock):
+    httpx_mock.add_response(json={"choices": []})
+    with pytest.raises(ResponseParseError, match="no choices"):
+        OpenAIProvider(api_key="sk-t").analyse("prompt")
