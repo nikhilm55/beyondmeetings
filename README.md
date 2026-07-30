@@ -12,14 +12,18 @@ curl -fsSL https://raw.githubusercontent.com/nikhilm55/beyondmeetings/main/insta
 ```
 
 The installer checks your system and walks you through the setup wizard in your
-browser. After that:
+browser. After that you get a **beyondMeetings icon in your applications** —
+click it and the app opens. If the server is not running it starts; if it is
+already running it just opens the page. Clicking twice never starts two.
+
+From a terminal the equivalent is:
 
 ```bash
-beyondmeetings serve
+beyondmeetings open
 ```
 
-opens a small app at `http://127.0.0.1:7788` with a Start/Stop button, a live
-timer, your meeting history, and a tray icon. Or stay in the terminal:
+Either way you get a small app at `http://127.0.0.1:7788` with a Start/Stop
+button, a live timer and your meeting history. Or skip the UI entirely:
 
 ```bash
 beyondmeetings start "Client kickoff"
@@ -178,7 +182,8 @@ never overwritten.
 
 | Command | Does |
 |---|---|
-| `beyondmeetings serve` | Run the app page and tray icon. |
+| `beyondmeetings open` | Open the app, starting the server only if needed. What the app icon runs. |
+| `beyondmeetings serve` | Run the server in the foreground (page + tray icon). |
 | `beyondmeetings start ["name"]` | Start recording. The name is optional. |
 | `beyondmeetings stop` | Stop, transcribe, and write everything. |
 | `beyondmeetings notes <transcript>` | Regenerate notes from an existing transcript. |

@@ -8,9 +8,9 @@ from .base import Check, CheckResult
 
 ENTRY = """[Desktop Entry]
 Type=Application
-Name=beyondMeetings
-Comment=Meeting recorder and note generator
-Exec=beyondmeetings serve --no-browser
+Name=beyondMeetings (background)
+Comment=Keeps beyondMeetings ready so the app icon opens instantly
+Exec=beyondmeetings serve --no-browser --no-tray
 Terminal=false
 X-GNOME-Autostart-enabled=true
 """

@@ -63,3 +63,9 @@ def test_install_prefix_is_not_the_data_directory():
 
 def test_readme_documents_uninstalling():
     assert "## Uninstalling" in (ROOT / "README.md").read_text()
+
+
+def test_readme_documents_the_app_icon():
+    text = (ROOT / "README.md").read_text()
+    assert "beyondmeetings open" in text
+    assert "icon in your applications" in text

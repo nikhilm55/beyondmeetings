@@ -11,6 +11,8 @@ DATA_DIR="${BEYONDMEETINGS_DATA:-$HOME/.local/share/beyondmeetings}"
 CONFIG_DIR="$HOME/.config/beyondmeetings"
 BIN_LINK="$HOME/.local/bin/beyondmeetings"
 AUTOSTART="$HOME/.config/autostart/beyondmeetings.desktop"
+LAUNCHER="$HOME/.local/share/applications/beyondmeetings.desktop"
+ICON="$HOME/.local/share/icons/hicolor/scalable/apps/beyondmeetings.svg"
 
 PURGE_DATA=0
 PURGE_KEYS=0
@@ -80,6 +82,8 @@ fi
 remove "$BIN_LINK" "command symlink"
 remove "$PREFIX" "program files"
 remove "$AUTOSTART" "start-at-login entry"
+remove "$LAUNCHER" "app icon"
+remove "$ICON" "icon file"
 remove "$CONFIG_DIR" "settings"
 
 if [ "$PURGE_KEYS" -eq 1 ]; then

@@ -7,6 +7,7 @@ from ..config import DEFAULT_CONFIG_PATH, Config
 from .autostart import AutostartCheck
 from .base import Check
 from .choices import ProviderChoice, TranscriberChoice
+from .desktop import DesktopLauncherCheck
 from .keys import GroqKeyCheck, ProviderKeyCheck
 from .mcp import McpCheck
 from .obsidian import ObsidianCheck
@@ -47,6 +48,7 @@ def build_checks(
         VaultCheck(config, config_path=config_path),
         RulesCheck(config),
         McpCheck(config),
+        DesktopLauncherCheck(config),
         AutostartCheck(config),
     ]
     return checks

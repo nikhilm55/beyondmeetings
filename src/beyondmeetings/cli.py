@@ -13,6 +13,7 @@ from pathlib import Path
 
 from .audio.pipewire import PipeWireRecorder
 from .config import DEFAULT_CONFIG_PATH, load_config
+from .desktop import DEFAULT_PORT, open_app
 from .doctor.base import completion_percent, run_all
 from .doctor.registry import build_checks
 from .llm.factory import MissingKeyError, build_provider
@@ -52,11 +53,16 @@ def build_parser() -> argparse.ArgumentParser:
     sub.add_parser("doctor", help="check prerequisites")
 
     setup = sub.add_parser("setup", help="open the setup wizard")
-    setup.add_argument("--port", type=int, default=7788)
+    setup.add_argument("--port", type=int, default=DEFAULT_PORT)
     setup.add_argument("--no-browser", action="store_true")
 
+    opener = sub.add_parser(
+        "open", help="open the app, starting the server only if needed"
+    )
+    opener.add_argument("--port", type=int, default=DEFAULT_PORT)
+
     serve = sub.add_parser("serve", help="run the app (page + tray)")
-    serve.add_argument("--port", type=int, default=7788)
+    serve.add_argument("--port", type=int, default=DEFAULT_PORT)
     serve.add_argument("--no-tray", action="store_true")
     serve.add_argument("--no-browser", action="store_true")
 
@@ -160,6 +166,18 @@ def main(argv: list[str] | None = None) -> int:
             host="127.0.0.1",
             port=args.port,
             log_level="warning",
+        )
+        return 0
+
+    if args.command == "open":
+        try:
+            outcome = open_app(args.port)
+        except RuntimeError as exc:
+            raise SystemExit(str(exc)) from exc
+        url = f"http://127.0.0.1:{args.port}/"
+        print(
+            f"beyondMeetings: {url}"
+            + ("" if outcome == "started" else "  (already running)")
         )
         return 0
 
