@@ -70,7 +70,7 @@ Four milestones, each independently useful. **Ships to GitHub after milestone 2.
 | 1 | Engine | `start`/`stop` works end-to-end from a terminal, correct notes written | `[x]` code complete — 136 tests green; awaiting real-recording verification |
 | 2 | Wizard | `install.sh`, checklist UI, % ring — the installable experience | `[x]` code complete — 226 tests green |
 | 3 | Providers | GPT/Gemini/Ollama, whisper.cpp, MCP registration | `[x]` code complete — 330 tests green |
-| 4 | App | Tray, full page, history, re-run notes | `[~]` next |
+| 4 | App | Tray, full page, history, re-run notes | `[x]` code complete — 407 tests green |
 
 ---
 
@@ -185,18 +185,48 @@ The generated `CLAUDE.md` / `AGENTS.md` / `GEMINI.md` land in the **vault root**
 
 ---
 
-### Milestone 4 — App `[ ]`
+### Milestone 4 — App `[x]` code complete
 
 **Goal:** the daily experience.
 
-- [ ] `server.py` `/` route
-- [ ] `web/` app page — Start/Stop, live elapsed time, transcription progress
-- [ ] `tray.py` — pystray icon reflecting recording state
-- [ ] Meeting history, searchable
-- [ ] Re-run notes on an existing transcript (recovery without a terminal)
-- [ ] Settings page
-- [ ] Autostart `.desktop` entry
-- [ ] Tests
+- [x] `segments.py` — per-segment transcript cache; earlier audio discarded once cached
+- [x] `rollover.py` — `tick()` over an injected clock, so segmentation is tested without threads
+- [x] `session.py` — `SessionManager`; `run_stop()` is synchronous for tests, `stop()` wraps it in a thread
+- [x] `history.py` — meeting listing from the vault
+- [x] `server.py` — `/` is the app, `/setup` the wizard; recording, meetings and regenerate endpoints
+- [x] `web/app.{html,css,js}` — Start/Stop, live timer, transcription progress, searchable history
+- [x] Re-run notes on an existing transcript (recovery without a terminal)
+- [x] `tray.py` — optional pystray icon reflecting recording state
+- [x] `doctor/autostart.py` — `.desktop` entry, with `--no-browser` so login doesn't fling a tab open
+- [x] `cli.py serve` — page + tray, degrading to a printed hint without the extra
+- [x] Tests: 407 passing
+- [x] Verified `serve` boots and every route responds; unknown assets 404
+- [x] Verified the tray icon renders in both states (idle centre indigo, recording centre white)
+
+#### B2 is now genuinely closed
+
+Verified by simulating a **3-hour meeting** with a fake clock ticking every 20 seconds:
+
+```
+Meeting ran 09:00 -> 12:00, 4 segments
+API calls DURING the meeting:  09:50, 10:40, 11:30
+Extra API calls at stop time:  1  (only the final segment)
+Audio left on disk:            seg003.wav only
+Cached transcripts:            all four, assembled in order
+```
+
+That is the behaviour the old `CLAUDE.md` described but never implemented. The 2026-07-08 failure mode — hours of audio submitted in one burst — is no longer reachable.
+
+#### Design decisions worth keeping
+
+- **The transcript is written to disk before the LLM is called.** A note-generation failure surfaces the transcript path plus a Regenerate button in the UI. Losing an hour of audio to an API outage would be the worst possible failure for this tool, so it is structurally impossible.
+- **Threads are kept thin and untested on purpose.** `RolloverWorker.tick(now)` and `SessionManager.run_stop()` hold all the logic and are called directly by tests. The threads do nothing but schedule.
+- **The tray is an optional extra.** pystray pulls a GTK/AppIndicator stack that varies by desktop; the page is fully usable without it and `serve` says so.
+- **No auth on the local server.** It binds `127.0.0.1` only — same posture as the wizard.
+
+#### Test updated rather than added
+
+`test_doctor_registry.py::test_registry_returns_checks_in_a_stable_order` failed again when `autostart` joined the registry — correctly. Updated to twelve rows.
 
 ---
 
@@ -208,18 +238,28 @@ The generated `CLAUDE.md` / `AGENTS.md` / `GEMINI.md` land in the **vault root**
 
 ---
 
-## 5. Known gaps carried forward
+## 5. What remains before shipping
 
-- **Segment rollover has no timer yet.** `roll_segment()` is implemented and unit-tested, but nothing calls it on a schedule until the server's background loop in milestone 4. A meeting over 50 minutes still transcribes correctly (one long segment), it simply does not yet get the rate-limit spreading that B2 is ultimately about. **B2 is not fully closed until milestone 4.**
-- **Tray autostart (check 9) is deferred to milestone 4**, with the tray itself.
-- **No provider has been exercised against its real API.** All four adapters are tested with mocked HTTP — request shape and response parsing are verified, but no live call has ever been made. The first real key entered in the wizard is also the first real request.
-- **Milestone 1 has still not been verified with a real recording.** Deferred at the user's request to the end of milestone 2. This is the only part of the engine never exercised against real audio.
+**The project is feature-complete against the spec.** All four milestones are code complete and all five original bugs are fixed. What is left is verification and release hygiene, not features.
+
+### Never exercised against reality
+
+1. **No real recording has ever been made.** Every layer above the audio capture is tested, but `pw-record`/`pactl` have only ever been driven by a fake runner. This is the largest untested surface in the project. Steps are in §6.
+2. **No provider has made a live API call.** All four adapters are tested with mocked HTTP — request shape and parsing are verified, but the first real key entered will also be the first real request. Same for Groq transcription.
+3. **whisper.cpp has never actually run.** The binary exists on this machine at `~/whispercpp/whisper.cpp/build/bin/whisper-cli`; the adapter's argument construction is tested with a fake runner but never invoked for real.
+4. **The tray icon has never been displayed.** `pystray` is installed in the dev venv and the icon images render correctly (verified pixel values), but `icon.run()` has not been called on a real desktop session.
+
+### Release blockers
+
+- [ ] Replace `REPLACE_ME` in `install.sh` (`REPO`), `README.md` and `CONTRIBUTING.md` with the real GitHub org/repo
+- [ ] Add a wizard/app screenshot to `README.md`
+- [ ] Confirm the author name in `LICENSE`
+- [ ] Review model defaults (`gpt-4o`, `gemini-2.0-flash`, `qwen2.5:14b`, `claude-opus-5`) — these churn fast
+- [ ] Decide where the generated rules files live (see the milestone 2 open question about vault-root clutter)
 
 ---
 
 ## 6. Manual verification
-
-The wizard now exists, so this is the real path:
 
 ```bash
 cd ~/meetings/beyondmeetings
@@ -230,7 +270,13 @@ Work the checklist to 100%: paste your Groq and Claude keys (each is verified wi
 
 **Rehearse against a throwaway vault first.** Point the vault row at an empty directory — `scaffold_vault()` populates it and never overwrites existing files, but a dry run means the real vault is untouched if something is wrong.
 
-Then record:
+Then record — either from the app, which shows progress as it happens:
+
+```bash
+.venv/bin/beyondmeetings serve      # click Start, speak, click Stop
+```
+
+or from the terminal:
 
 ```bash
 .venv/bin/beyondmeetings start "Engine Smoke Test"
@@ -259,3 +305,4 @@ Append one line per session. Newest last.
 - **2026-07-30** — Python bootstrap strategy decided (system Python, `uv` fallback) and recorded in spec §11.
 - **2026-07-30** — Milestone 2 planned and implemented on the same branch. 226 tests passing. Wizard verified booting and driving its full fix flow against a throwaway vault; `doctor` verified against this machine at 50%. Remaining before GitHub: the three release blockers above, plus milestone 1's real-recording check.
 - **2026-07-30** — Milestone 3 planned and implemented. 330 tests passing. All four providers, whisper.cpp, both factories, and MCP registration done. Verified provider/transcriber switching reshapes the check list, and MCP registration preserves an existing `~/.claude.json`. Still outstanding: the real-recording test, and no provider has yet made a live API call.
+- **2026-07-30** — Milestone 4 planned and implemented. 407 tests passing. **Project is feature-complete against the spec.** App page, tray, history, regenerate-on-failure, autostart. **B2 verified closed** by simulating a 3-hour meeting: API calls at 09:50/10:40/11:30 and only one at stop time. `pystray` + `pillow` installed in the dev venv so the icon tests run rather than skip. Everything in §5 "never exercised against reality" is what remains.

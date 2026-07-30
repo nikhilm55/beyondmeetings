@@ -11,8 +11,15 @@ and links follow-up meetings into chains.
 curl -fsSL https://raw.githubusercontent.com/REPLACE_ME/beyondmeetings/main/install.sh | bash
 ```
 
-The installer checks your system, walks you through the setup wizard in your
-browser, and leaves you with one command:
+The installer checks your system and walks you through the setup wizard in your
+browser. After that:
+
+```bash
+beyondmeetings serve
+```
+
+opens a small app at `http://127.0.0.1:7788` with a Start/Stop button, a live
+timer, your meeting history, and a tray icon. Or stay in the terminal:
 
 ```bash
 beyondmeetings start "Client kickoff"
@@ -20,7 +27,15 @@ beyondmeetings start "Client kickoff"
 beyondmeetings stop
 ```
 
-`stop` does everything: transcribes, analyses, and writes the note.
+Either way, stopping does everything: transcribes, analyses, and writes the
+note.
+
+### Long meetings
+
+Recording rolls over into fresh segments every 50 minutes, and each closed
+segment is transcribed in the background *while the next one records*. By the
+time you hit Stop, almost everything is already done — and the transcription
+API is never handed hours of audio in one burst. A five-hour meeting works.
 
 ---
 
@@ -138,11 +153,27 @@ never overwritten.
 
 | Command | Does |
 |---|---|
+| `beyondmeetings serve` | Run the app page and tray icon. |
 | `beyondmeetings start ["name"]` | Start recording. The name is optional. |
 | `beyondmeetings stop` | Stop, transcribe, and write everything. |
 | `beyondmeetings notes <transcript>` | Regenerate notes from an existing transcript. |
 | `beyondmeetings doctor` | Check your installation. |
 | `beyondmeetings setup` | Reopen the setup wizard. |
+
+The tray icon needs two extra packages, because the GTK/AppIndicator stack is
+fiddly across desktops and not everyone wants it:
+
+```bash
+pip install 'beyondmeetings[tray]'
+```
+
+Without them, `serve` still runs the page — it just says so and skips the icon.
+
+### If note generation fails
+
+The transcript is written to disk **before** the AI is called. If the API is
+down or your key expired, the app shows the transcript path and a **Regenerate
+notes** button. Your recording is never lost to a failed API call.
 
 ---
 

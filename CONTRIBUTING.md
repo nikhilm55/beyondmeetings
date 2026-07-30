@@ -49,7 +49,23 @@ not a model's guess. This is what lets any provider produce identical files.
 | Model providers | `llm/` |
 | File writing | `vault/` |
 | Prerequisite checks | `doctor/` |
-| Setup wizard | `server.py` + `web/` |
+| Session lifecycle | `session.py`, `rollover.py`, `segments.py` |
+| Web app and wizard | `server.py` + `web/` |
+
+### Threads
+
+Two background threads exist, and both are deliberately thin:
+
+- **The rollover ticker** calls `RolloverWorker.tick(now)` every 20 seconds.
+  All the decision logic lives in `tick()`, which takes an injected clock — so
+  segmentation is tested with a fake clock and no sleeping. Test `tick()`, not
+  the thread.
+- **The stop pipeline** runs `SessionManager.run_stop()`. That method is the
+  synchronous body and is what tests call directly; `stop()` merely wraps it in
+  a thread so the HTTP request returns immediately.
+
+If you find yourself wanting `time.sleep()` in a test, the logic probably wants
+extracting into something that takes a clock.
 
 ## Adding a model provider
 

@@ -17,6 +17,7 @@ beyondmeetings = "beyondmeetings.cli:main"
 
 [project.optional-dependencies]
 dev = ["pytest>=8.0", "pytest-httpx>=0.30", "httpx>=0.27"]
+tray = ["pystray>=0.19", "pillow>=10.0"]
 
 [build-system]
 requires = ["hatchling"]

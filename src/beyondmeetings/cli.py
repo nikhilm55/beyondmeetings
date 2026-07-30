@@ -55,6 +55,11 @@ def build_parser() -> argparse.ArgumentParser:
     setup.add_argument("--port", type=int, default=7788)
     setup.add_argument("--no-browser", action="store_true")
 
+    serve = sub.add_parser("serve", help="run the app (page + tray)")
+    serve.add_argument("--port", type=int, default=7788)
+    serve.add_argument("--no-tray", action="store_true")
+    serve.add_argument("--no-browser", action="store_true")
+
     return parser
 
 
@@ -135,6 +140,41 @@ def main(argv: list[str] | None = None) -> int:
             port=args.port,
             log_level="warning",
         )
+        return 0
+
+    if args.command == "serve":
+        import threading
+
+        import uvicorn
+
+        from .server import create_app
+        from .tray import TRAY_HINT, run_tray, tray_available
+
+        url = f"http://127.0.0.1:{args.port}/"
+        application = create_app(config_path=DEFAULT_CONFIG_PATH)
+        server = uvicorn.Server(
+            uvicorn.Config(
+                application, host="127.0.0.1", port=args.port, log_level="warning"
+            )
+        )
+        thread = threading.Thread(target=server.run, daemon=True)
+        thread.start()
+        print(f"beyondMeetings: {url}")
+
+        if not args.no_browser:
+            webbrowser.open(url)
+
+        if args.no_tray or not tray_available():
+            if not args.no_tray:
+                print(TRAY_HINT)
+            try:
+                thread.join()
+            except KeyboardInterrupt:
+                print()
+            return 0
+
+        # The tray drives the same session the page does.
+        run_tray(url, session=application.state.session_getter())
         return 0
 
     return 1

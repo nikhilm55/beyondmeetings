@@ -24,7 +24,7 @@ def test_registry_returns_checks_in_a_stable_order(tmp_path):
         "provider_choice", "transcriber_choice",
         "pipewire", "ffmpeg",
         "groq_key", "provider_key", "whisper_model",
-        "obsidian", "vault", "rules", "mcp",
+        "obsidian", "vault", "rules", "mcp", "autostart",
     ]
 
 

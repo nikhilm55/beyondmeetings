@@ -4,6 +4,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from ..config import DEFAULT_CONFIG_PATH, Config
+from .autostart import AutostartCheck
 from .base import Check
 from .choices import ProviderChoice, TranscriberChoice
 from .keys import GroqKeyCheck, ProviderKeyCheck
@@ -46,5 +47,6 @@ def build_checks(
         VaultCheck(config, config_path=config_path),
         RulesCheck(config, target_dir=rules_dir),
         McpCheck(config),
+        AutostartCheck(config),
     ]
     return checks
