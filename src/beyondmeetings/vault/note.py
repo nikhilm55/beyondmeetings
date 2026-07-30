@@ -10,10 +10,25 @@ from ..models import MeetingNote, MeetingRef
 from .paths import meeting_wikilink
 
 
+def _yaml_scalar(value: str) -> str:
+    """Quote anything that could inject YAML keys into the frontmatter.
+
+    Model-supplied tags and dates land here; a tag of `Zenith: real` or a value
+    containing a newline used to add arbitrary keys and break Obsidian's
+    frontmatter parsing.
+    """
+    text = " ".join(str(value).split())
+    if not text:
+        return '""'
+    if any(c in text for c in ':#{}[]&*!|>%@`"\'') or text[0] in "-?,":
+        return '"' + text.replace("\\", "\\\\").replace('"', '\\"') + '"'
+    return text
+
+
 def _yaml_list(key: str, values: list[str]) -> str:
     if not values:
         return ""
-    lines = "\n".join(f"  - {v}" for v in values)
+    lines = "\n".join(f"  - {_yaml_scalar(v)}" for v in values)
     return f"{key}:\n{lines}\n"
 
 
@@ -30,7 +45,7 @@ def render_note(
 ) -> str:
     parts: list[str] = ["---\n"]
     parts.append(_yaml_list("tags", note.tags))
-    parts.append(f"date: {note.date}\n")
+    parts.append(f"date: {_yaml_scalar(note.date)}\n")
     parts.append(_yaml_list("attendees", note.attendees))
 
     prev_link = None

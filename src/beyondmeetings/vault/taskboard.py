@@ -28,11 +28,16 @@ def update_counters(text: str, pending: int) -> str:
     return GLANCE_PENDING.sub(f"`{pending} pending`", text, count=1)
 
 
+def _one_line(value: str) -> str:
+    """Callout nesting breaks if a value contains a newline."""
+    return " ".join(str(value).split())
+
+
 def _render_entry(item: ActionItem, ref: MeetingRef, description: str) -> str:
     tags = f"`{item.project}` · " if item.project else ""
-    head = f"> > **=={item.task}==** · {tags}`{item.priority}`"
+    head = f"> > **=={_one_line(item.task)}==** · {tags}`{item.priority}`"
 
-    detail = f"> > {description}"
+    detail = f"> > {_one_line(description)}"
     if item.owner:
         detail += f" — **{item.owner}**"
     if item.due:
@@ -42,19 +47,36 @@ def _render_entry(item: ActionItem, ref: MeetingRef, description: str) -> str:
     return f"{head}\n{detail}\n> >\n"
 
 
+def _already_present(text: str, item: ActionItem, ref: MeetingRef) -> bool:
+    """Same task name, same meeting — this entry is already on the board."""
+    return f"**=={item.task}==**" in text and meeting_wikilink(ref) in text
+
+
 def add_tasks(
     text: str,
     items: list[ActionItem],
     ref: MeetingRef,
     description: str,
 ) -> str:
-    if not items:
+    """Idempotent: re-running for the same meeting will not duplicate tasks.
+
+    generate_notes is not transactional, so a failure after the board write
+    sends the user to Regenerate — which used to add every task a second time
+    and bump the counter again.
+    """
+    fresh = [i for i in items if not _already_present(text, i, ref)]
+    if not fresh:
         return text
 
     current = count_pending(text)
     match = PENDING_HEADER.search(text)
-    insert_at = match.end() + 1
+    # +1 steps over the header's newline. Clamp so a header that is the final
+    # line without a trailing newline does not concatenate onto itself.
+    insert_at = min(match.end() + 1, len(text))
+    if insert_at == len(text) and not text.endswith("\n"):
+        text += "\n"
+        insert_at = len(text)
 
-    block = "".join(_render_entry(i, ref, description) for i in items)
+    block = "".join(_render_entry(i, ref, description) for i in fresh)
     text = text[:insert_at] + block + text[insert_at:]
-    return update_counters(text, current + len(items))
+    return update_counters(text, current + len(fresh))

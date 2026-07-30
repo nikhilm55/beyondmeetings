@@ -6,17 +6,23 @@ the filesystem unvalidated.
 """
 from __future__ import annotations
 
-from typing import Literal
+from typing import Annotated, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, StringConstraints
 
 Priority = Literal["HIGH", "MEDIUM", "LOW"]
+
+# `date` becomes a directory name, so it is validated as a value and not just
+# as a type. A model returning "2026-7-9" produced a folder the history and
+# follow-up scanners then rejected — the note existed but was invisible; and
+# "../../tmp" escaped the vault entirely.
+IsoDate = Annotated[str, StringConstraints(pattern=r"^\d{4}-\d{2}-\d{2}$")]
 
 
 class MeetingRef(BaseModel):
     """Identifies a meeting note by its date folder and display title."""
 
-    date: str
+    date: IsoDate
     title: str
 
     @property

@@ -5,8 +5,11 @@ the MeetingNote it returns.
 """
 from __future__ import annotations
 
+import logging
 from datetime import date
 from pathlib import Path
+
+from pydantic import ValidationError
 
 from .config import Config
 from .labels import provider_label, transcriber_label
@@ -16,6 +19,8 @@ from .prompts import build_analysis_prompt
 from .vault import followup, home, taskboard
 from .vault import note as note_render
 from .vault.paths import note_path
+
+log = logging.getLogger(__name__)
 
 
 def generate_notes(
@@ -33,7 +38,16 @@ def generate_notes(
     )
     result = provider.analyse(prompt, [c.ref.id for c in candidates])
 
-    ref = MeetingRef(date=result.date or meeting_date, title=result.title)
+    # A malformed date must not lose the whole note — fall back to the real
+    # recording date and carry on.
+    try:
+        ref = MeetingRef(date=result.date or meeting_date, title=result.title)
+    except ValidationError:
+        log.warning(
+            "model returned an unusable date %r; using %s", result.date, meeting_date
+        )
+        result.date = meeting_date
+        ref = MeetingRef(date=meeting_date, title=result.title)
 
     # 1. Reciprocal follow-up link — resolved before rendering, so a link to a
     #    note that no longer exists degrades to standalone in the note too.

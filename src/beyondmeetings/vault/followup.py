@@ -62,6 +62,21 @@ def gather_candidates(vault: Path, days: int = 30, limit: int = 12) -> list[Cand
     return found
 
 
+FOLLOWUPS_HEADING = re.compile(r"^## Follow-ups[ \t]*$", re.MULTILINE)
+SECTION_END = re.compile(r"^(?:## |---[ \t]*$)", re.MULTILINE)
+FENCE = re.compile(r"^(```|~~~)", re.MULTILINE)
+
+
+def _fenced_spans(text: str) -> list[tuple[int, int]]:
+    """Ranges inside ``` fences, so headings quoted in code are ignored."""
+    marks = [m.start() for m in FENCE.finditer(text)]
+    return [(marks[i], marks[i + 1]) for i in range(0, len(marks) - 1, 2)]
+
+
+def _outside_fences(match_start: int, spans: list[tuple[int, int]]) -> bool:
+    return not any(start <= match_start < end for start, end in spans)
+
+
 def _split_frontmatter(text: str) -> tuple[str, str]:
     """Return (frontmatter, body). Frontmatter is '' when there is none.
 
@@ -87,16 +102,39 @@ def append_followup_backlink(previous_note: Path, new: MeetingRef) -> None:
         return
 
     front, body = _split_frontmatter(text)
+    spans = _fenced_spans(body)
 
-    if "## Follow-ups" in body:
-        head, _, tail = body.partition("## Follow-ups\n")
-        existing, sep, rest = tail.partition("\n---")
-        body = head + "## Follow-ups\n" + existing.rstrip("\n") + "\n" + line + "\n" + sep + rest
+    heading = next(
+        (m for m in FOLLOWUPS_HEADING.finditer(body) if _outside_fences(m.start(), spans)),
+        None,
+    )
+
+    if heading is not None:
+        # The section ends at the NEXT heading, not at the footer rule. Looking
+        # for the rule swallowed every section in between and appended the link
+        # under whatever heading happened to come last.
+        after = heading.end()
+        following = next(
+            (
+                m
+                for m in SECTION_END.finditer(body, after + 1)
+                if _outside_fences(m.start(), spans)
+            ),
+            None,
+        )
+        end = following.start() if following else len(body)
+        section = body[after:end].rstrip("\n")
+        body = body[:after] + section + "\n" + line + "\n\n" + body[end:]
     else:
-        before, sep, rest = body.rpartition("\n---")
-        if sep:
-            body = before.rstrip("\n") + f"\n\n## Follow-ups\n{line}\n" + sep + rest
+        footer = [
+            m for m in SECTION_END.finditer(body)
+            if body[m.start():m.start() + 3] == "---" and _outside_fences(m.start(), spans)
+        ]
+        block = f"## Follow-ups\n{line}\n"
+        if footer:
+            cut = footer[-1].start()
+            body = body[:cut].rstrip("\n") + f"\n\n{block}\n" + body[cut:]
         else:
-            body = body.rstrip("\n") + f"\n\n## Follow-ups\n{line}\n"
+            body = body.rstrip("\n") + f"\n\n{block}"
 
     previous_note.write_text(front + body, encoding="utf-8")

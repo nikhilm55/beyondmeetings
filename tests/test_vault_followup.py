@@ -123,3 +123,75 @@ def test_backlink_is_not_duplicated_on_repeat(tmp_path):
     append_followup_backlink(path, ref)
     append_followup_backlink(path, ref)
     assert path.read_text().count("Followed up in:") == 1
+
+
+# --- Review finding #3: back-link landed in the wrong section ---
+
+FULL_NOTE = (
+    "---\ntags:\n  - meeting\ndate: 2026-07-29\n---\n\n"
+    "# Prev\n\n## Executive Summary\nWe planned.\n\n"
+    "## Follow-ups\n- Chase the API contract\n\n"
+    "## Key Discussion Points\n- talked about scope\n\n"
+    "---\n*footer*\n"
+)
+
+
+def _apply(tmp_path, body):
+    path = tmp_path / "Prev.md"
+    path.write_text(body)
+    append_followup_backlink(path, MeetingRef(date="2026-07-30", title="Part 2"))
+    return path.read_text()
+
+
+def test_backlink_lands_under_followups_not_the_last_section(tmp_path):
+    """The section ends at the next heading, not at the footer rule."""
+    out = _apply(tmp_path, FULL_NOTE)
+    followups = out.split("## Follow-ups\n")[1].split("## ")[0]
+    assert "Followed up in:" in followups
+    assert "Followed up in:" not in out.split("## Key Discussion Points\n")[1]
+
+
+def test_existing_followups_content_is_preserved(tmp_path):
+    out = _apply(tmp_path, FULL_NOTE)
+    assert "- Chase the API contract" in out
+    assert "- talked about scope" in out
+
+
+def test_later_sections_stay_intact_and_ordered(tmp_path):
+    out = _apply(tmp_path, FULL_NOTE)
+    assert out.index("## Follow-ups") < out.index("## Key Discussion Points")
+    assert out.rstrip().endswith("*footer*")
+
+
+def test_a_renamed_heading_gets_a_new_section_before_the_footer(tmp_path):
+    body = FULL_NOTE.replace("## Follow-ups", "## Follow-ups from last week")
+    out = _apply(tmp_path, body)
+    assert "## Follow-ups from last week" in out
+    assert out.index("Followed up in:") < out.index("*footer*")
+
+
+def test_heading_as_final_line_without_a_newline(tmp_path):
+    out = _apply(tmp_path, "# Prev\n\n## Follow-ups")
+    assert "## Follow-ups## Follow-ups" not in out
+    assert out.count("## Follow-ups") == 1
+    assert "Followed up in:" in out
+
+
+def test_heading_only_inside_a_code_fence_is_ignored(tmp_path):
+    body = (
+        "# Prev\n\n## Notes\n\n```markdown\n## Follow-ups\n- example\n```\n\n"
+        "---\n*footer*\n"
+    )
+    out = _apply(tmp_path, body)
+    fenced = out.split("```markdown\n")[1].split("```")[0]
+    assert "Followed up in:" not in fenced
+    assert "Followed up in:" in out
+
+
+def test_still_idempotent_with_the_new_placement(tmp_path):
+    path = tmp_path / "Prev.md"
+    path.write_text(FULL_NOTE)
+    ref = MeetingRef(date="2026-07-30", title="Part 2")
+    append_followup_backlink(path, ref)
+    append_followup_backlink(path, ref)
+    assert path.read_text().count("Followed up in:") == 1

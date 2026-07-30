@@ -100,3 +100,46 @@ def test_insertion_into_an_empty_pending_callout_keeps_later_sections(tmp_path):
     assert "> [!success]- Done — 0" in out
     assert "> [!danger]+ Blocked — 0" in out
     assert out.count("**==A==**") == 1
+
+
+# --- Review finding #4: add_tasks was not idempotent ---
+
+def test_adding_the_same_tasks_twice_is_a_no_op():
+    """Regenerate after a partial failure must not duplicate the board."""
+    items = [ActionItem(task="Procure licences", owner="Sam", priority="HIGH")]
+    once = add_tasks(BOARD, items, REF, "d")
+    twice = add_tasks(once, items, REF, "d")
+    assert twice == once
+    assert count_pending(twice) == 3
+
+
+def test_the_same_task_from_a_different_meeting_is_still_added():
+    items = [ActionItem(task="Procure licences")]
+    once = add_tasks(BOARD, items, REF, "d")
+    other = MeetingRef(date="2026-08-01", title="Other Meeting")
+    twice = add_tasks(once, items, other, "d")
+    assert count_pending(twice) == 4
+
+
+def test_partially_overlapping_tasks_add_only_the_new_ones():
+    first = add_tasks(BOARD, [ActionItem(task="A")], REF, "d")
+    both = add_tasks(first, [ActionItem(task="A"), ActionItem(task="B")], REF, "d")
+    assert count_pending(both) == 4
+    assert both.count("**==A==**") == 1
+    assert both.count("**==B==**") == 1
+
+
+def test_header_as_final_line_without_a_newline():
+    board = "> [!abstract] Board\n> `0 pending`\n\n> [!todo]+ Pending — 0"
+    out = add_tasks(board, [ActionItem(task="Ship it")], REF, "d")
+    assert "Pending — 1> >" not in out
+    assert "> > **==Ship it==**" in out
+
+
+def test_a_newline_in_a_task_does_not_break_callout_nesting():
+    out = add_tasks(BOARD, [ActionItem(task="Line one\nline two")], REF, "d")
+    body = out.split("> [!todo]+ Pending — 3\n", 1)[1]
+    for line in body.splitlines():
+        if not line.strip():
+            break
+        assert line.startswith("> >"), f"escaped the callout: {line!r}"

@@ -42,3 +42,37 @@ def test_meeting_wikilink_with_display_title_uses_pipe():
     ref = MeetingRef(date="2026-07-30", title="Phase 4 - Plan")
     link = meeting_wikilink(ref, display="Phase 4 — Plan")
     assert link == "[[Meetings/2026-07-30/Phase 4 - Plan|Phase 4 — Plan]]"
+
+
+# --- Review finding #5: model-controlled date reached the filesystem ---
+
+import pytest
+from pydantic import ValidationError
+
+
+def test_meeting_ref_rejects_a_traversal_date():
+    with pytest.raises(ValidationError):
+        MeetingRef(date="../../../../tmp/pwned", title="Standup")
+
+
+def test_meeting_ref_rejects_a_non_iso_date():
+    """'2026-7-9' wrote a folder the history scanner then ignored."""
+    for bad in ("2026-7-9", "June 22 2026", "", "2026/07/30"):
+        with pytest.raises(ValidationError):
+            MeetingRef(date=bad, title="Standup")
+
+
+def test_meeting_ref_accepts_an_iso_date():
+    assert MeetingRef(date="2026-07-30", title="Standup").date == "2026-07-30"
+
+
+def test_note_path_refuses_to_escape_the_vault(tmp_path):
+    """Belt-and-braces: even if validation were bypassed, the write is refused."""
+    ref = MeetingRef.model_construct(date="../../../../tmp/pwned", title="Standup")
+    with pytest.raises(ValueError, match="outside the vault"):
+        note_path(tmp_path, ref)
+
+
+def test_note_path_allows_a_normal_date(tmp_path):
+    ref = MeetingRef(date="2026-07-30", title="Standup")
+    assert note_path(tmp_path, ref).is_relative_to(tmp_path)

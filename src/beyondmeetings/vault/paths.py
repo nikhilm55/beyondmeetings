@@ -29,7 +29,18 @@ def meetings_dir(vault: Path) -> Path:
 
 
 def note_path(vault: Path, ref: MeetingRef) -> Path:
-    return meetings_dir(vault) / ref.date / f"{safe_filename(ref.title)}.md"
+    """Resolve a note path, asserting it stays inside the vault.
+
+    MeetingRef.date is already pattern-validated; this is the belt-and-braces
+    check at the point of the actual write, because the transcript that
+    produced it is untrusted text.
+    """
+    vault = Path(vault)
+    path = meetings_dir(vault) / ref.date / f"{safe_filename(ref.title)}.md"
+    resolved = path.resolve()
+    if not resolved.is_relative_to(meetings_dir(vault).resolve()):
+        raise ValueError(f"refusing to write outside the vault: {resolved}")
+    return path
 
 
 def meeting_wikilink(ref: MeetingRef, display: str | None = None) -> str:
