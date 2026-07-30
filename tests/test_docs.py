@@ -39,3 +39,27 @@ def test_contributing_documents_the_clone_path_and_tests():
 
 def test_contributing_explains_how_to_add_a_provider():
     assert "LLMProvider" in (ROOT / "CONTRIBUTING.md").read_text()
+
+
+def test_uninstaller_exists_and_is_executable():
+    script = ROOT / "uninstall.sh"
+    assert script.is_file()
+    assert script.stat().st_mode & 0o111
+
+
+def test_uninstaller_does_not_delete_data_by_default():
+    """Removing the program must never take a user's meetings with it."""
+    text = (ROOT / "uninstall.sh").read_text()
+    assert "--purge-data" in text
+    assert "PURGE_DATA=0" in text
+
+
+def test_install_prefix_is_not_the_data_directory():
+    """A venv inside the data dir makes 'rm -rf' destroy recordings."""
+    install = (ROOT / "install.sh").read_text()
+    assert "beyondmeetings-app" in install
+    assert 'PREFIX="${BEYONDMEETINGS_HOME:-$HOME/.local/share/beyondmeetings}"' not in install
+
+
+def test_readme_documents_uninstalling():
+    assert "## Uninstalling" in (ROOT / "README.md").read_text()

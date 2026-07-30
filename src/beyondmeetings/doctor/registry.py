@@ -22,7 +22,6 @@ def build_checks(
     secret_dir: Path | None = None,
 ) -> list[Check]:
     config_path = Path(config_path or DEFAULT_CONFIG_PATH)
-    rules_dir = Path(config.vault_path) if config.vault_path else config_path.parent
     checks: list[Check] = [
         # Choices first — they change what the rows below mean.
         ProviderChoice(config, config_path=config_path),
@@ -46,7 +45,7 @@ def build_checks(
         WhisperModelCheck(config),
         ObsidianCheck(),
         VaultCheck(config, config_path=config_path),
-        RulesCheck(config, target_dir=rules_dir),
+        RulesCheck(config),
         McpCheck(config),
         AutostartCheck(config),
     ]

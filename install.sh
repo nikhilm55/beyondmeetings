@@ -8,7 +8,10 @@ set -euo pipefail
 
 MIN_MAJOR=3
 MIN_MINOR=10
-PREFIX="${BEYONDMEETINGS_HOME:-$HOME/.local/share/beyondmeetings}"
+# Deliberately NOT ~/.local/share/beyondmeetings — that is the data directory
+# holding recordings and transcripts. Keeping the venv out of it means an
+# uninstall can remove the program without touching a user's meetings.
+PREFIX="${BEYONDMEETINGS_HOME:-$HOME/.local/share/beyondmeetings-app}"
 BIN_DIR="$HOME/.local/bin"
 REPO="${BEYONDMEETINGS_REPO:-https://github.com/nikhilm55/beyondmeetings}"
 

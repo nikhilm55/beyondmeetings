@@ -151,6 +151,7 @@ keyring backend is available.
 |---|---|
 | Config | `~/.config/beyondmeetings/config.toml` |
 | Recordings and transcripts | `~/.local/share/beyondmeetings/` |
+| The program itself | `~/.local/share/beyondmeetings-app/` |
 | Notes | `<your vault>/Meetings/YYYY-MM-DD/` |
 | Task board | `<your vault>/Tasks/Task Board.md` |
 | Dashboard | `<your vault>/Home.md` |
@@ -198,6 +199,26 @@ Without them, `serve` still runs the page — it just says so and skips the icon
 The transcript is written to disk **before** the AI is called. If the API is
 down or your key expired, the app shows the transcript path and a **Regenerate
 notes** button. Your recording is never lost to a failed API call.
+
+---
+
+## Uninstalling
+
+```bash
+./uninstall.sh
+```
+
+Removes the program, the command, your settings and the start-at-login entry.
+**Your recordings, transcripts, API keys, vault and meeting notes are kept.**
+
+```bash
+./uninstall.sh --dry-run       # show what would go, change nothing
+./uninstall.sh --purge-keys    # also forget your stored API keys
+./uninstall.sh --purge-data    # also delete recordings and transcripts
+```
+
+The program is deliberately installed to a *different* directory from your
+recordings, so removing it can never take your meetings with it.
 
 ---
 
