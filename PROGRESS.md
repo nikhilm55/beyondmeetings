@@ -68,8 +68,8 @@ Four milestones, each independently useful. **Ships to GitHub after milestone 2.
 | # | Milestone | Delivers | Status |
 |---|---|---|---|
 | 1 | Engine | `start`/`stop` works end-to-end from a terminal, correct notes written | `[x]` code complete — 136 tests green; awaiting real-recording verification |
-| 2 | Wizard | `install.sh`, checklist UI, % ring — the installable experience | `[ ]` |
-| 3 | Providers | GPT/Gemini/Ollama, whisper.cpp, MCP registration | `[ ]` |
+| 2 | Wizard | `install.sh`, checklist UI, % ring — the installable experience | `[x]` code complete — 226 tests green |
+| 3 | Providers | GPT/Gemini/Ollama, whisper.cpp, MCP registration | `[~]` next |
 | 4 | App | Tray, full page, history, re-run notes | `[ ]` |
 
 ---
@@ -117,28 +117,36 @@ Findings 1–3 were caught by running the pipeline end-to-end and *reading the o
 
 ---
 
-### Milestone 2 — Wizard `[ ]`
+### Milestone 2 — Wizard `[x]` code complete
 
 **Goal:** a stranger runs one `curl` command and reaches a working install.
 
-**Done when:** wiping config and running `install.sh` reaches 100% and records a meeting successfully.
+- [x] `doctor/base.py` — `Check`, `CheckResult`, `InputField`, `run_all()`, `completion_percent()`
+- [x] `doctor/system.py` — PipeWire, ffmpeg, package-manager hints
+- [x] `doctor/keys.py` — Groq + provider keys, **validated by live API call**
+- [x] `doctor/obsidian.py` — detection (PATH, flatpak, snap) + flatpak install
+- [x] `doctor/vault.py` — path selection, scaffold, config persistence
+- [x] `doctor/rules_check.py` + `rules.py` — one template → three files
+- [x] `doctor/registry.py` — ordered check list
+- [x] `server.py` — `/api/status`, `/api/fix/{id}`, `/api/settings`, static page
+- [x] `web/` — checklist UI, % ring, per-row Fix buttons, in-place input panels, light + dark
+- [x] `install.sh` — system Python probe (creates a real venv, not a version check), `uv` fallback, `--no-uv`, `--dry-run`
+- [x] `cli.py doctor` / `cli.py setup` — same check objects as the wizard
+- [x] `README.md`, `LICENSE`, `CONTRIBUTING.md`
+- [x] Tests: 226 passing
+- [x] Verified on this machine: `doctor` reports 50%, correctly detecting PipeWire ✓, ffmpeg ✓, Obsidian ✓ (found at `/snap/bin/obsidian`), and the three missing items
+- [x] Verified the wizard boots, serves its assets, and the full fix flow works end-to-end against a throwaway vault (scaffold → config persisted → ring 50→67% → rules written)
+- [ ] **Ship to GitHub** — see release blockers below
 
-- [ ] `doctor/checks.py` — check object: `id`, `label`, `detect()`, `fix()`, `required`
-- [ ] Checks 1–7 (PipeWire, ffmpeg, Groq key, provider key, Obsidian, vault, rules files) — see spec §6
-- [ ] Key validation via **live API call**, never regex
-- [ ] `server.py` — FastAPI app, `/setup` routes + JSON API
-- [ ] `web/` — checklist UI, % ring, per-row Fix buttons, in-place input panels
-- [ ] `rules.py` + single template → `CLAUDE.md` / `AGENTS.md` / `GEMINI.md`
-- [ ] Obsidian install via flatpak (Flathub)
-- [ ] `install.sh` — environment bootstrap, symlink `~/.local/bin`, launch wizard
-  - [ ] Probe system Python: version ≥3.10 **and** a venv that actually creates (don't trust the version string — `python3-venv` can be missing on a modern Python)
-  - [ ] Fall back to `uv` when the probe fails; announce the download before fetching it
-  - [ ] `--no-uv` flag: print the distro-specific fix (`sudo apt install python3-venv`, …) and exit
-  - [ ] Test the three failure modes: no `python3`, Python 3.9, Python 3.12 without `python3-venv`
-- [ ] `cli.py doctor` — same check objects as the wizard
-- [ ] `README.md` (with screenshot), `LICENSE`, `CONTRIBUTING.md`
-- [ ] Tests: ring percentage, fix dispatch, rules-file generation
-- [ ] **Ship to GitHub**
+#### Release blockers before pushing to GitHub
+
+- [ ] Replace `REPLACE_ME` in `install.sh` (`REPO`), `README.md` and `CONTRIBUTING.md` with the real GitHub org/repo
+- [ ] Add a wizard screenshot to `README.md`
+- [ ] Confirm the author name in `LICENSE` is how you want to be credited
+
+#### Open question raised during implementation
+
+The generated `CLAUDE.md` / `AGENTS.md` / `GEMINI.md` land in the **vault root**, so a coding agent run there finds them. The cost is that Obsidian indexes them as three near-identical notes that show up in search and the graph view. Alternatives: put them in a subfolder (agents then need `--add-dir` or a `cd`), or make the location a wizard setting. Left as-is for now — decide before shipping.
 
 ---
 
@@ -183,38 +191,43 @@ Findings 1–3 were caught by running the pipeline end-to-end and *reading the o
 ## 5. Known gaps carried forward
 
 - **Segment rollover has no timer yet.** `roll_segment()` is implemented and unit-tested, but nothing calls it on a schedule until the server's background loop in milestone 4. A meeting over 50 minutes still transcribes correctly (one long segment), it simply does not yet get the rate-limit spreading that B2 is ultimately about. **B2 is not fully closed until milestone 4.**
-- **`beyondmeetings setup` does not exist yet** — milestone 2. Until then, config and keys are set from Python directly (see §6).
-- **Only Claude works as a note writer.** The other three providers land in milestone 3.
+- **Only Claude works as a note writer.** The other three providers land in milestone 3. `ProviderKeyCheck` returns a clear "arrives in milestone 3" message if one is selected, rather than storing a key that cannot be used.
+- **MCP registration (check 8) and the provider picker UI are deferred to milestone 3**, where the other providers land — a picker offering providers that cannot yet write notes would be a trap.
+- **Tray autostart (check 9) is deferred to milestone 4**, with the tray itself.
+- **Milestone 1 has still not been verified with a real recording.** Deferred at the user's request to the end of milestone 2. This is the only part of the engine never exercised against real audio.
 
 ---
 
-## 6. Setting up for manual verification
+## 6. Manual verification
 
-Milestone 1 has no wizard yet, so configure it by hand:
+The wizard now exists, so this is the real path:
 
 ```bash
 cd ~/meetings/beyondmeetings
+.venv/bin/beyondmeetings setup      # opens http://127.0.0.1:7788/setup
+```
 
-.venv/bin/python -c "
-from beyondmeetings.secrets import set_secret
-set_secret('groq_api_key', input('Groq key: ').strip())
-set_secret('anthropic_api_key', input('Anthropic key: ').strip())
-"
+Work the checklist to 100%: paste your Groq and Claude keys (each is verified with a live API call before it is stored), point the vault row at a folder, and hit the rules row's Fix button.
 
-.venv/bin/python -c "
-from beyondmeetings.config import Config, save_config
-save_config(Config(vault_path='/home/you/Documents/Obsidian Vault',
-                   projects=['Acme', 'Zenith']))
-"
+**Rehearse against a throwaway vault first.** Point the vault row at an empty directory — `scaffold_vault()` populates it and never overwrites existing files, but a dry run means the real vault is untouched if something is wrong.
 
-.venv/bin/beyondmeetings start \"Engine Smoke Test\"
+Then record:
+
+```bash
+.venv/bin/beyondmeetings start "Engine Smoke Test"
 # speak for ~60 seconds
 .venv/bin/beyondmeetings stop
 ```
 
-Then confirm: the note exists at `Meetings/YYYY-MM-DD/<Title>.md` with a real derived title (not `recording-HH-MM`); tasks appear in `Tasks/Task Board.md` as `> >` entries; the Pending counter matches in **both** `Task Board.md` and `Home.md`; the meeting is at the top of Home's Recent callout.
+Confirm all five:
 
-**This writes into the real vault.** To rehearse against a throwaway copy first, point `vault_path` at an empty directory — `scaffold_vault()` will populate it.
+1. The note exists at `Meetings/YYYY-MM-DD/<Title>.md` with a **real derived title**, not `recording-HH-MM`
+2. Tasks appear in `Tasks/Task Board.md` as nested `> >` entries
+3. The Pending counter matches in **both** `Task Board.md` and `Home.md`
+4. The meeting is at the top of Home's Recent callout
+5. The blank line before `> [!success]- Done` is intact
+
+`beyondmeetings doctor` reports the same state as the wizard at any time — they share the check objects.
 
 ---
 
@@ -224,3 +237,5 @@ Append one line per session. Newest last.
 
 - **2026-07-30** — Design brainstormed and spec written (`781d85f`). Repo created at `~/meetings/beyondmeetings/`, git initialised, `.gitignore` added.
 - **2026-07-30** — Milestone 1 plan written (`f0871b2`), then implemented on branch `milestone-1-engine`. 136 tests passing. Five bugs found and fixed during implementation (see milestone 1 section). Remaining: manual verification with a real recording.
+- **2026-07-30** — Python bootstrap strategy decided (system Python, `uv` fallback) and recorded in spec §11.
+- **2026-07-30** — Milestone 2 planned and implemented on the same branch. 226 tests passing. Wizard verified booting and driving its full fix flow against a throwaway vault; `doctor` verified against this machine at 50%. Remaining before GitHub: the three release blockers above, plus milestone 1's real-recording check.
