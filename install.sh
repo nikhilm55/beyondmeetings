@@ -12,7 +12,7 @@ MIN_MINOR=10
 # holding recordings and transcripts. Keeping the venv out of it means an
 # uninstall can remove the program without touching a user's meetings.
 PREFIX="${BEYONDMEETINGS_HOME:-$HOME/.local/share/beyondmeetings-app}"
-BIN_DIR="$HOME/.local/bin"
+BIN_DIR="${BEYONDMEETINGS_BIN:-$HOME/.local/bin}"
 REPO="${BEYONDMEETINGS_REPO:-https://github.com/nikhilm55/beyondmeetings}"
 
 USE_UV=1
