@@ -51,3 +51,32 @@ def test_no_uv_with_unusable_python_prints_a_distro_hint(tmp_path):
     proc = _run(["--no-uv", "--dry-run"], env=env)
     assert proc.returncode != 0
     assert "python3-venv" in proc.stdout + proc.stderr
+
+
+# --- curl | bash leaves BASH_SOURCE unset, and set -u makes that fatal ---
+
+def test_survives_being_piped_into_bash():
+    """The README's one-liner pipes this script in; BASH_SOURCE is then unset."""
+    script = SCRIPT.read_text()
+    proc = subprocess.run(
+        ["bash", "-s", "--", "--dry-run"],
+        input=script, capture_output=True, text=True,
+    )
+    combined = proc.stdout + proc.stderr
+    assert "unbound variable" not in combined, combined
+    assert proc.returncode == 0, combined
+
+
+def test_bash_source_is_defaulted():
+    assert "${BASH_SOURCE[0]:-}" in SCRIPT.read_text(), (
+        "an undefaulted BASH_SOURCE[0] aborts under `set -u` when piped"
+    )
+
+
+def test_bin_dir_is_overridable():
+    """Needed to sandbox-test the installer without clobbering a real install."""
+    assert "BEYONDMEETINGS_BIN" in SCRIPT.read_text()
+
+
+def test_installs_the_app_icon():
+    assert "install_desktop_entry" in SCRIPT.read_text()

@@ -7,23 +7,41 @@ meeting note with an executive summary, decisions, action items and open
 questions — then adds the action items to a task board, updates a dashboard,
 and links follow-up meetings into chains.
 
+## Installation
+
+**Step 1 — install it.** One command:
+
 ```bash
 curl -fsSL https://raw.githubusercontent.com/nikhilm55/beyondmeetings/main/install.sh | bash
 ```
 
-The installer checks your system and walks you through the setup wizard in your
-browser. After that you get a **beyondMeetings icon in your applications** —
-click it and the app opens. If the server is not running it starts; if it is
-already running it just opens the page. Clicking twice never starts two.
+Prefer to read the script first? That is reasonable:
 
-From a terminal the equivalent is:
+```bash
+curl -fsSL https://raw.githubusercontent.com/nikhilm55/beyondmeetings/main/install.sh -o install.sh
+less install.sh
+bash install.sh
+```
+
+It checks your system, installs into `~/.local/share/beyondmeetings-app`, adds
+a `beyondmeetings` command to `~/.local/bin`, puts an app icon in your
+applications menu, and opens the setup wizard.
+
+**Step 2 — finish the wizard.** It opens at `http://127.0.0.1:7788/setup`
+automatically. Work down the checklist until the ring reads 100%:
+
+- **Note writer** → **Claude Code** (needs no API key, uses your subscription)
+- **Groq API key** → paste one from [console.groq.com](https://console.groq.com);
+  it is verified with a live call before being saved
+- **Obsidian vault** → the folder you want your notes in
+
+**Step 3 — use it.** Click the **beyondMeetings** icon in your applications, or:
 
 ```bash
 beyondmeetings open
 ```
 
-Either way you get a small app at `http://127.0.0.1:7788` with a Start/Stop
-button, a live timer and your meeting history. Or skip the UI entirely:
+Then hit **Start**, have your meeting, hit **Stop**. Or skip the UI:
 
 ```bash
 beyondmeetings start "Client kickoff"
@@ -31,8 +49,28 @@ beyondmeetings start "Client kickoff"
 beyondmeetings stop
 ```
 
-Either way, stopping does everything: transcribes, analyses, and writes the
-note.
+Either way, stopping does everything: transcribes, analyses, writes the note,
+updates your task board.
+
+### If `beyondmeetings` is not found
+
+`~/.local/bin` is not on your `PATH`. Add it:
+
+```bash
+echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc && source ~/.bashrc
+```
+
+The installer warns you if this applies.
+
+### Updating
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/nikhilm55/beyondmeetings/main/install.sh | bash
+```
+
+Same command. Your settings, keys and recordings are left alone.
+
+---
 
 ### Long meetings
 

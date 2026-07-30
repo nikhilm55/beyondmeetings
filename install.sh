@@ -127,8 +127,16 @@ fi
 say "Installing beyondMeetings…"
 "$PREFIX/venv/bin/python" -m pip install --quiet --upgrade pip
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-if [ -f "$SCRIPT_DIR/pyproject.toml" ]; then
+# ${BASH_SOURCE[0]} is unset when this script is piped into bash
+# (curl … | bash), and `set -u` makes that fatal. Default it so the
+# curl path falls through to the git install instead of erroring.
+SCRIPT_SRC="${BASH_SOURCE[0]:-}"
+SCRIPT_DIR=""
+if [ -n "$SCRIPT_SRC" ]; then
+  SCRIPT_DIR="$(cd "$(dirname "$SCRIPT_SRC")" && pwd)"
+fi
+
+if [ -n "$SCRIPT_DIR" ] && [ -f "$SCRIPT_DIR/pyproject.toml" ]; then
   "$PREFIX/venv/bin/python" -m pip install --quiet "$SCRIPT_DIR"
 else
   "$PREFIX/venv/bin/python" -m pip install --quiet "beyondmeetings @ git+$REPO"
@@ -142,6 +150,21 @@ case ":$PATH:" in
   *) say "Note: $BIN_DIR is not on your PATH — add it to your shell profile." ;;
 esac
 
+# Install the app icon so beyondMeetings appears in the applications menu.
+"$PREFIX/venv/bin/python" -c "
+from beyondmeetings.desktop import install_desktop_entry
+install_desktop_entry()
+" >/dev/null 2>&1 && say "App icon added to your applications"
+
 echo
+if "$PREFIX/venv/bin/python" -c "
+import sys
+from beyondmeetings.desktop import server_is_running
+sys.exit(0 if server_is_running() else 1)
+" 2>/dev/null; then
+  say "beyondMeetings is already running — open http://127.0.0.1:7788/setup"
+  exit 0
+fi
+
 say "Opening the setup wizard…"
 exec "$BIN_DIR/beyondmeetings" setup
