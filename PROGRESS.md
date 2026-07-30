@@ -140,9 +140,9 @@ Findings 1–3 were caught by running the pipeline end-to-end and *reading the o
 
 #### Release blockers before pushing to GitHub
 
-- [ ] Replace `REPLACE_ME` in `install.sh` (`REPO`), `README.md` and `CONTRIBUTING.md` with the real GitHub org/repo
+- [x] Replace the repo URL in `install.sh`, `README.md` and `CONTRIBUTING.md` — now `nikhilm55/beyondmeetings`
 - [ ] Add a wizard screenshot to `README.md`
-- [ ] Confirm the author name in `LICENSE` is how you want to be credited
+- [x] Confirm the author name in `LICENSE` is how you want to be credited
 
 #### Open question raised during implementation
 
@@ -320,9 +320,9 @@ Ran for the first time. **Six things worked on the first try:**
 
 ### Release blockers
 
-- [ ] Replace `REPLACE_ME` in `install.sh` (`REPO`), `README.md` and `CONTRIBUTING.md` with the real GitHub org/repo
+- [x] Replace the repo URL in `install.sh`, `README.md` and `CONTRIBUTING.md` — now `nikhilm55/beyondmeetings`
 - [ ] Add a wizard/app screenshot to `README.md`
-- [ ] Confirm the author name in `LICENSE`
+- [x] Confirm the author name in `LICENSE`
 - [ ] Review model defaults (`gpt-4o`, `gemini-2.0-flash`, `qwen2.5:14b`, `claude-opus-5`) — these churn fast
 - [ ] Decide whether to do the Tier 3 architecture work (§4b) before or after first release
 - [ ] Decide where the generated rules files live (see the milestone 2 open question about vault-root clutter)

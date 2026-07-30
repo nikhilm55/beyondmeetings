@@ -6,7 +6,7 @@ welcome — particularly macOS and Windows audio capture.
 ## Getting set up
 
 ```bash
-git clone https://github.com/REPLACE_ME/beyondmeetings
+git clone https://github.com/nikhilm55/beyondmeetings
 cd beyondmeetings
 ./install.sh          # same script users run; safe to run from a clone
 ```

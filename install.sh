@@ -10,7 +10,7 @@ MIN_MAJOR=3
 MIN_MINOR=10
 PREFIX="${BEYONDMEETINGS_HOME:-$HOME/.local/share/beyondmeetings}"
 BIN_DIR="$HOME/.local/bin"
-REPO="${BEYONDMEETINGS_REPO:-https://github.com/REPLACE_ME/beyondmeetings}"
+REPO="${BEYONDMEETINGS_REPO:-https://github.com/nikhilm55/beyondmeetings}"
 
 USE_UV=1
 DRY_RUN=0

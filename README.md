@@ -8,7 +8,7 @@ questions — then adds the action items to a task board, updates a dashboard,
 and links follow-up meetings into chains.
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/REPLACE_ME/beyondmeetings/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/nikhilm55/beyondmeetings/main/install.sh | bash
 ```
 
 The installer checks your system and walks you through the setup wizard in your
