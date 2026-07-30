@@ -130,6 +130,11 @@ def create_app(
         except RuntimeError as exc:
             raise HTTPException(status_code=409, detail=str(exc)) from exc
 
+    @app.post("/api/recording/reset")
+    def recording_reset():
+        """Escape hatch for a wedged or corrupt recording state."""
+        return current_session().reset()
+
     # ---------- meetings ----------
 
     @app.get("/api/meetings")

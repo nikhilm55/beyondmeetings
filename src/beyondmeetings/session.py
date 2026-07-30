@@ -24,6 +24,8 @@ from .segments import combine_transcripts, discard_audio, transcribe_segment
 log = logging.getLogger(__name__)
 
 TICK_SECONDS = 20
+# Long enough for an in-flight roll_segment (kill + respawn pw-record) to land.
+TICKER_JOIN_TIMEOUT = 30
 BUSY_PHASES = ("stopping", "transcribing", "analysing")
 
 
@@ -58,6 +60,7 @@ class SessionManager:
         self._segments_total = 0
         self._started_at: datetime | None = None
         self._name = ""
+        self._rollover_error: str | None = None
         self._stop_thread: threading.Thread | None = None
         self._ticker: threading.Thread | None = None
         self._ticker_stop = threading.Event()
@@ -94,18 +97,29 @@ class SessionManager:
                 "note_path": self._note_path,
                 "transcript_path": self._transcript_path,
                 "error": self._error,
+                # A dead ticker or an unreadable state file used to be visible
+                # only in the log — the user found out at stop time.
+                "rollover_error": self._rollover_error,
+                "state_error": getattr(self.recorder, "state_error", None),
             }
 
     # ---------- start ----------
 
     def start(self, name: str = "") -> dict:
-        if self.recorder.status() is not None:
-            raise RuntimeError("already recording")
-        if self._phase in BUSY_PHASES:
-            raise RuntimeError(f"still {self._phase} the previous meeting")
+        """Guards, state mutation and recorder.start() are all one atomic step.
 
-        name = (name or "").strip() or placeholder_name(self.clock())
+        FastAPI dispatches sync endpoints to a threadpool, so two tabs or a
+        double-click really can arrive concurrently. Check-then-act outside the
+        lock let every caller through, each loading its own PipeWire modules
+        that nothing could later tear down.
+        """
         with self._lock:
+            if self.recorder.status() is not None:
+                raise RuntimeError("already recording")
+            if self._phase in BUSY_PHASES:
+                raise RuntimeError(f"still {self._phase} the previous meeting")
+
+            name = (name or "").strip() or placeholder_name(self.clock())
             self._error = None
             self._note_path = None
             self._transcript_path = None
@@ -113,12 +127,24 @@ class SessionManager:
             self._segments_total = 0
             self._name = name
             self._started_at = self.clock()
-            started = self._started_at
+            self._rollover_error = None
 
-        self.recorder.start(name)
-        self._rollover.mark_segment_start(started)
+            self.recorder.start(name)
+            self._rollover.mark_segment_start(self._started_at)
+
         self._set_phase("recording")
         self._start_ticker()
+        return self.status()
+
+    def reset(self) -> dict:
+        """Recover from a wedged or corrupt recording state."""
+        with self._lock:
+            self._ticker_stop.set()
+            if hasattr(self.recorder, "reset"):
+                self.recorder.reset()
+            self._error = None
+            self._rollover_error = None
+        self._set_phase("idle", "Recording state cleared.")
         return self.status()
 
     def _start_ticker(self) -> None:
@@ -128,8 +154,17 @@ class SessionManager:
             while not self._ticker_stop.wait(TICK_SECONDS):
                 try:
                     self._rollover.tick(self.clock())
-                except Exception:
+                    with self._lock:
+                        self._rollover_error = None
+                except Exception as exc:
                     log.exception("rollover tick failed")
+                    # Segmentation is now dead for the rest of the meeting.
+                    # Say so, rather than discovering it as a 429 at stop time.
+                    with self._lock:
+                        self._rollover_error = (
+                            f"Segmentation stopped: {exc}. A long meeting may hit "
+                            "transcription rate limits at stop time."
+                        )
 
         self._ticker = threading.Thread(target=loop, daemon=True)
         self._ticker.start()
@@ -155,7 +190,14 @@ class SessionManager:
         if self.recorder.status() is None:
             raise RuntimeError("no active recording")
 
+        # Event.set() does not wait. A mid-flight roll_segment() would finish
+        # after teardown, re-create the state file the stop just deleted, and
+        # leave the app permanently unable to start or stop.
         self._ticker_stop.set()
+        ticker = self._ticker
+        if ticker is not None and ticker.is_alive():
+            ticker.join(timeout=TICKER_JOIN_TIMEOUT)
+
         self._set_phase("stopping")
         state = self.recorder.stop()
 

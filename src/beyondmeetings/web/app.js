@@ -53,12 +53,18 @@ function renderStatus(s) {
   btn.classList.toggle("stop", s.recording);
   $("name").hidden = s.recording || busy;
 
+  // A wedged/corrupt state and a dead segmentation ticker both used to be
+  // invisible until stop time.
+  const wedged = Boolean(s.state_error);
   const failed = s.phase === "failed";
-  $("alert").hidden = !failed;
-  if (failed) {
-    $("alertText").textContent = s.error || "Note generation failed.";
-    $("retry").hidden = !s.transcript_path;
+  $("alert").hidden = !(failed || wedged || s.rollover_error);
+  if (!$("alert").hidden) {
+    $("alertText").textContent = wedged
+      ? `Recording state is unreadable: ${s.state_error}`
+      : s.error || s.rollover_error || "Note generation failed.";
+    $("retry").hidden = wedged || !s.transcript_path;
     $("retry").dataset.transcript = s.transcript_path || "";
+    $("reset").hidden = !wedged;
   }
 
   // Poll only while something is in flight.
@@ -156,6 +162,18 @@ $("retry").onclick = async (event) => {
   } finally {
     btn.disabled = false;
     btn.textContent = "Regenerate notes";
+  }
+};
+
+$("reset").onclick = async (event) => {
+  const btn = event.currentTarget;
+  btn.disabled = true;
+  try {
+    renderStatus(await api("/api/recording/reset", {}));
+  } catch (err) {
+    window.alert(`Could not reset: ${err.message}`);
+  } finally {
+    btn.disabled = false;
   }
 };
 

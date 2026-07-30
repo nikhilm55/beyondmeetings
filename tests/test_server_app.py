@@ -190,3 +190,9 @@ def test_regenerate_surfaces_a_provider_failure_as_400(app_and_session, tmp_path
     response = client.post("/api/regenerate", json={"transcript": str(transcript)})
     assert response.status_code == 400
     assert "no key stored" in response.json()["detail"]
+
+
+def test_reset_endpoint_clears_a_wedged_session(app_and_session):
+    client, session, _ = app_and_session
+    session.reset = lambda: {**session.state, "phase": "idle"}
+    assert client.post("/api/recording/reset", json={}).json()["phase"] == "idle"

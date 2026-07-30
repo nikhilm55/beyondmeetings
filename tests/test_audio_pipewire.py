@@ -118,3 +118,70 @@ def test_stale_modules_are_cleaned_before_a_new_start(tmp_path):
     runner.commands.clear()
     recorder.start("Second")
     assert any(c[:2] == ["pactl", "unload-module"] for c in runner.commands)
+
+
+# --- Review finding #9: corrupt state must not wedge the app ---
+
+def test_status_returns_none_on_corrupt_state_instead_of_raising(tmp_path):
+    recorder = PipeWireRecorder(data_dir=tmp_path, runner=FakeRunner())
+    (tmp_path / "recording-state.json").write_text("{ not json")
+    assert recorder.status() is None
+    assert "corrupt" in recorder.state_error
+
+
+def test_state_error_clears_once_the_file_is_readable(tmp_path):
+    recorder = PipeWireRecorder(data_dir=tmp_path, runner=FakeRunner())
+    (tmp_path / "recording-state.json").write_text("{ not json")
+    recorder.status()
+    recorder.reset()
+    assert recorder.status() is None
+    assert recorder.state_error is None
+
+
+def test_reset_removes_a_corrupt_state_file(tmp_path):
+    recorder = PipeWireRecorder(data_dir=tmp_path, runner=FakeRunner())
+    (tmp_path / "recording-state.json").write_text("{ not json")
+    recorder.reset()
+    assert not (tmp_path / "recording-state.json").exists()
+
+
+def test_reset_tears_down_modules_of_a_live_recording(tmp_path):
+    runner = FakeRunner()
+    recorder = PipeWireRecorder(data_dir=tmp_path, runner=runner)
+    state = recorder.start("Test")
+    runner.commands.clear()
+    recorder.reset()
+    unloaded = [c[-1] for c in runner.commands if c[:2] == ["pactl", "unload-module"]]
+    assert sorted(unloaded) == sorted(str(m) for m in state.module_ids)
+    assert recorder.status() is None
+
+
+def test_roll_and_stop_do_not_interleave(tmp_path):
+    """roll_segment and stop are two writers of the same state file."""
+    import threading
+
+    runner = FakeRunner()
+    recorder = PipeWireRecorder(data_dir=tmp_path, runner=runner)
+    recorder.start("Test")
+
+    order = []
+    original = recorder._spawn_capture
+
+    def slow_spawn(target):
+        order.append("spawn-enter")
+        threading.Event().wait(0.05)
+        order.append("spawn-exit")
+        return original(target)
+
+    recorder._spawn_capture = slow_spawn
+    roller = threading.Thread(target=recorder.roll_segment)
+    roller.start()
+    threading.Event().wait(0.01)
+    try:
+        recorder.stop()
+    except RuntimeError:
+        pass
+    roller.join()
+
+    # The lock must not let stop() slip between spawn-enter and spawn-exit.
+    assert order == ["spawn-enter", "spawn-exit"]

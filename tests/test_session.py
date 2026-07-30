@@ -196,3 +196,87 @@ def test_starting_again_clears_the_previous_error(failing):
     failing.run_stop()
     failing.start("Second")
     assert failing.status()["error"] is None
+
+
+# --- Review findings #2, #8, #9, #12 ---
+
+def test_concurrent_starts_only_one_wins(manager):
+    """FastAPI runs sync endpoints in a threadpool: two tabs really can race."""
+    import threading
+
+    barrier = threading.Barrier(4)
+    accepted, rejected = [], []
+
+    def attempt():
+        barrier.wait()
+        try:
+            manager.start("Race")
+            accepted.append(1)
+        except RuntimeError:
+            rejected.append(1)
+
+    threads = [threading.Thread(target=attempt) for _ in range(4)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+
+    assert len(accepted) == 1, "exactly one start must win"
+    assert len(rejected) == 3
+
+
+def test_run_stop_joins_the_ticker_before_tearing_down(manager):
+    """A roll_segment landing after teardown re-creates the state file and
+    wedges the app permanently."""
+    joined = []
+    manager.start("Test")
+    real = manager._ticker
+
+    class Watcher:
+        def is_alive(self):
+            return True
+
+        def join(self, timeout=None):
+            joined.append(timeout)
+
+    manager._ticker = Watcher()
+    manager.run_stop()
+    manager._ticker = real
+    assert joined, "run_stop must join the ticker before recorder.stop()"
+
+
+def test_status_reports_a_rollover_failure(manager):
+    manager.start("Test")
+    with manager._lock:
+        manager._rollover_error = "Segmentation stopped: boom"
+    assert "Segmentation stopped" in manager.status()["rollover_error"]
+
+
+def test_status_exposes_a_recorder_state_error(manager):
+    class Wedged:
+        state_error = "corrupt recording state"
+
+        def status(self):
+            return None
+
+    manager.recorder = Wedged()
+    assert manager.status()["state_error"] == "corrupt recording state"
+
+
+def test_reset_clears_a_wedged_session(manager):
+    reset_called = []
+
+    class Wedged:
+        state_error = "corrupt"
+
+        def status(self):
+            return None
+
+        def reset(self):
+            reset_called.append(1)
+
+    manager.recorder = Wedged()
+    status = manager.reset()
+    assert reset_called == [1]
+    assert status["phase"] == "idle"
+    assert status["error"] is None
