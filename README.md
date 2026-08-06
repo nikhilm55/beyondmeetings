@@ -1,4 +1,4 @@
-# beyondMeetings
+# BeyondMeetings
 
 Record a meeting, get structured notes in Obsidian. Locally, on Linux.
 
