@@ -29,14 +29,14 @@ class RecordingState(BaseModel):
 
 def save_state(state: RecordingState, path: Path) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(state.model_dump_json(indent=2))
+    path.write_text(state.model_dump_json(indent=2), encoding="utf-8")
 
 
 def load_state(path: Path) -> RecordingState | None:
     if not path.exists():
         return None
     try:
-        return RecordingState(**json.loads(path.read_text()))
+        return RecordingState(**json.loads(path.read_text(encoding="utf-8")))
     except (json.JSONDecodeError, TypeError, ValueError) as exc:
         raise ValueError(f"corrupt recording state at {path}: {exc}") from exc
 

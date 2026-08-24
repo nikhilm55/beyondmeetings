@@ -100,8 +100,10 @@ if [ -z "${BEYONDMEETINGS_ALLOW_WSL:-}" ] &&
     echo
     echo "  $PS_ONE_LINER"
     echo
-    echo "To install the Linux build inside WSL anyway, re-run with:"
-    echo "  BEYONDMEETINGS_ALLOW_WSL=1"
+    echo "To install the Linux build inside WSL anyway, put the variable on"
+    echo "bash rather than on curl, which would only set it for the download:"
+    echo
+    echo "  curl -fsSL <install.sh url> | BEYONDMEETINGS_ALLOW_WSL=1 bash"
     echo
     echo "Nothing was installed."
   } >&2
@@ -193,7 +195,9 @@ if [ -n "$SCRIPT_SRC" ]; then
 fi
 
 if [ -n "$SCRIPT_DIR" ] && [ -f "$SCRIPT_DIR/pyproject.toml" ]; then
-  "$PREFIX/venv/bin/python" -m pip install --quiet "$SCRIPT_DIR[desktop]"
+  # Braced: "$SCRIPT_DIR[desktop]" reads as an array subscript to shellcheck
+  # (SC1087), which the new CI runs as an error.
+  "$PREFIX/venv/bin/python" -m pip install --quiet "${SCRIPT_DIR}[desktop]"
 else
   "$PREFIX/venv/bin/python" -m pip install --quiet "beyondmeetings[desktop] @ git+$REPO"
 fi
