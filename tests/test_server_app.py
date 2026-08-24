@@ -411,8 +411,11 @@ def test_library_chat_rejects_an_empty_or_oversized_query(app_and_session):
 
 
 def test_history_is_empty_without_a_vault(tmp_path):
+    # An explicit empty library, not the default: `Config()` alone resolves
+    # library_path through platformdirs and would read the real one.
     app = create_app(
-        config=Config(), config_path=tmp_path / "c.toml",
+        config=Config(library_path=str(tmp_path / "library")),
+        config_path=tmp_path / "c.toml",
         checks_factory=lambda c: [], session=FakeSession(),
     )
     assert TestClient(app).get("/api/meetings").json()["meetings"] == []
