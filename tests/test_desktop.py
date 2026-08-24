@@ -1,4 +1,6 @@
 """Desktop launcher: clicking the icon must be idempotent."""
+import sys
+
 import pytest
 
 from beyondmeetings.config import Config
@@ -7,6 +9,12 @@ from beyondmeetings.desktop import (
     install_desktop_entry, open_app, remove_desktop_entry, resolve_executable,
 )
 from beyondmeetings.doctor.desktop import DesktopLauncherCheck
+
+# The condition only fires on win32, so Linux collection is unchanged.
+pytestmark = pytest.mark.skipif(
+    sys.platform == "win32",
+    reason="freedesktop .desktop entries are Linux-only",
+)
 
 
 def test_open_reuses_a_running_server(monkeypatch):

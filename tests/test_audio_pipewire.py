@@ -1,8 +1,14 @@
+import sys
 from pathlib import Path
 
 import pytest
 
 from beyondmeetings.audio.pipewire import PipeWireRecorder, build_filename_base
+
+# The condition only fires on win32, so Linux collection is unchanged.
+pytestmark = pytest.mark.skipif(
+    sys.platform == "win32", reason="PipeWire is Linux-only"
+)
 
 
 @pytest.fixture(autouse=True)

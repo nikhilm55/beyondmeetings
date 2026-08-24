@@ -1,5 +1,15 @@
+import sys
+
+import pytest
+
 from beyondmeetings.config import Config
 from beyondmeetings.doctor.autostart import AutostartCheck, refresh_installed_autostart
+
+# Windows has its own autostart rows in doctor/windows.py. The condition only
+# fires on win32, so Linux collection is unchanged.
+pytestmark = pytest.mark.skipif(
+    sys.platform == "win32", reason="XDG autostart is Linux-only"
+)
 
 
 def test_missing_when_no_desktop_entry(tmp_path):

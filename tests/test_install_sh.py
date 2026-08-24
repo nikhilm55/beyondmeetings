@@ -1,6 +1,17 @@
 import shutil
 import subprocess
+import sys
 from pathlib import Path
+
+import pytest
+
+# install.sh is a bash installer and refuses to run on Windows by design;
+# Windows installs through install.ps1. The condition only fires on win32, so
+# Linux collection is unchanged.
+pytestmark = pytest.mark.skipif(
+    sys.platform == "win32",
+    reason="install.sh is a bash installer; Windows uses install.ps1",
+)
 
 SCRIPT = Path(__file__).resolve().parents[1] / "install.sh"
 
