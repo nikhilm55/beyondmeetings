@@ -29,7 +29,7 @@ class StubProvider:
 def test_explicit_transcript_reference_resolves_only_inside_data_dir(tmp_path):
     transcript = tmp_path / "transcripts" / "2026-08-18" / "recording.txt"
     transcript.parent.mkdir(parents=True)
-    transcript.write_text("everything said")
+    transcript.write_text("everything said", encoding="utf-8")
     note = '---\ntranscript: "2026-08-18/recording.txt"\n---\n# Review\n'
     assert resolve_meeting_transcript(note, tmp_path) == transcript.resolve()
 
@@ -40,7 +40,7 @@ def test_existing_note_is_matched_by_recording_minute(tmp_path):
         / "2026-08-18_11-32_recording-11-32.txt"
     )
     transcript.parent.mkdir(parents=True)
-    transcript.write_text("everything said")
+    transcript.write_text("everything said", encoding="utf-8")
     note = '---\ndate: 2026-08-18\nrecorded_at: "2026-08-18T11:32:41"\n---\n'
     assert resolve_meeting_transcript(note, tmp_path) == transcript.resolve()
 
@@ -48,8 +48,8 @@ def test_existing_note_is_matched_by_recording_minute(tmp_path):
 def test_ambiguous_transcripts_are_not_guessed(tmp_path):
     folder = tmp_path / "transcripts" / "2026-08-18"
     folder.mkdir(parents=True)
-    (folder / "one.txt").write_text("one")
-    (folder / "two.txt").write_text("two")
+    (folder / "one.txt").write_text("one", encoding="utf-8")
+    (folder / "two.txt").write_text("two", encoding="utf-8")
     with pytest.raises(FileNotFoundError, match="could not be matched"):
         resolve_meeting_transcript("---\ndate: 2026-08-18\n---\n", tmp_path)
 

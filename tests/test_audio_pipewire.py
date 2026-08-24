@@ -191,14 +191,14 @@ def test_stale_modules_are_cleaned_before_a_new_start(tmp_path):
 
 def test_status_returns_none_on_corrupt_state_instead_of_raising(tmp_path):
     recorder = PipeWireRecorder(data_dir=tmp_path, runner=FakeRunner())
-    (tmp_path / "recording-state.json").write_text("{ not json")
+    (tmp_path / "recording-state.json").write_text("{ not json", encoding="utf-8")
     assert recorder.status() is None
     assert "corrupt" in recorder.state_error
 
 
 def test_state_error_clears_once_the_file_is_readable(tmp_path):
     recorder = PipeWireRecorder(data_dir=tmp_path, runner=FakeRunner())
-    (tmp_path / "recording-state.json").write_text("{ not json")
+    (tmp_path / "recording-state.json").write_text("{ not json", encoding="utf-8")
     recorder.status()
     recorder.reset()
     assert recorder.status() is None
@@ -207,7 +207,7 @@ def test_state_error_clears_once_the_file_is_readable(tmp_path):
 
 def test_reset_removes_a_corrupt_state_file(tmp_path):
     recorder = PipeWireRecorder(data_dir=tmp_path, runner=FakeRunner())
-    (tmp_path / "recording-state.json").write_text("{ not json")
+    (tmp_path / "recording-state.json").write_text("{ not json", encoding="utf-8")
     recorder.reset()
     assert not (tmp_path / "recording-state.json").exists()
 

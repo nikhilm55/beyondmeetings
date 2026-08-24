@@ -179,7 +179,8 @@ def test_history_lists_vault_meetings(app_and_session):
     folder.mkdir(parents=True)
     (folder / "Standup.md").write_text(
         "---\ntags:\n  - meeting\ndate: 2026-07-30\n---\n\n"
-        "# Standup\n\n## Executive Summary\nWe synced.\n"
+        "# Standup\n\n## Executive Summary\nWe synced.\n",
+        encoding="utf-8",
     )
     rows = client.get("/api/meetings").json()["meetings"]
     assert rows[0]["title"] == "Standup"
@@ -189,7 +190,7 @@ def test_meeting_note_can_be_read_inside_the_app(app_and_session):
     client, _, vault = app_and_session
     note = vault / "Meetings" / "2026-07-30" / "Standup.md"
     note.parent.mkdir(parents=True)
-    note.write_text("# Standup\n\n## Executive Summary\nWe synced.\n")
+    note.write_text("# Standup\n\n## Executive Summary\nWe synced.\n", encoding="utf-8")
     response = client.get("/api/note", params={"path": "Meetings/2026-07-30/Standup"})
     assert response.status_code == 200
     assert "We synced" in response.json()["content"]
@@ -199,7 +200,7 @@ def test_meeting_note_can_be_exported_and_downloaded_as_pdf(app_and_session):
     client, _, vault = app_and_session
     note = vault / "Meetings" / "2026-07-30" / "Standup.md"
     note.parent.mkdir(parents=True)
-    note.write_text("# Standup\n\n## Executive Summary\nWe synced.\n")
+    note.write_text("# Standup\n\n## Executive Summary\nWe synced.\n", encoding="utf-8")
 
     create_pdf = route_endpoint(client.app, "/api/note/pdf", "POST")
     created = create_pdf(NoteRequest(path="Meetings/2026-07-30/Standup"))
@@ -220,7 +221,8 @@ def test_discussion_summary_is_generated_cached_and_exported(app_and_session,
     note.parent.mkdir(parents=True)
     note.write_text(
         "---\ndate: 2026-07-30\n---\n\n# Standup\n\n"
-        "## Executive Summary\nWe compared launch options.\n"
+        "## Executive Summary\nWe compared launch options.\n",
+        encoding="utf-8",
     )
 
     from beyondmeetings import server as server_mod
@@ -277,11 +279,12 @@ def test_full_transcript_is_translated_cached_and_exported(
     note.write_text(
         "---\ndate: 2026-07-30\n"
         "transcript: 2026-07-30/recording.txt\n---\n\n"
-        "# Standup\n\n## Executive Summary\nWe talked.\n"
+        "# Standup\n\n## Executive Summary\nWe talked.\n",
+        encoding="utf-8",
     )
     transcript = tmp_path / "data" / "transcripts" / "2026-07-30" / "recording.txt"
     transcript.parent.mkdir(parents=True, exist_ok=True)
-    transcript.write_text("First statement. Second statement. Repeat, repeat.")
+    transcript.write_text("First statement. Second statement. Repeat, repeat.", encoding="utf-8")
 
     from beyondmeetings import server as server_mod
     from beyondmeetings.models import MeetingNote
@@ -335,7 +338,7 @@ def test_share_reveals_the_generated_pdf(tmp_path):
     vault = tmp_path / "vault"
     note = vault / "Meetings" / "2026-07-30" / "Plan.md"
     note.parent.mkdir(parents=True)
-    note.write_text("# Plan\n\nShare this meeting.\n")
+    note.write_text("# Plan\n\nShare this meeting.\n", encoding="utf-8")
     shared = []
     app = create_app(
         config=Config(vault_path=str(vault), data_dir=str(tmp_path / "data")),
@@ -356,7 +359,7 @@ def test_share_reveals_the_generated_pdf(tmp_path):
 
 def test_pdf_export_refuses_traversal(app_and_session, tmp_path):
     client, _, _ = app_and_session
-    (tmp_path / "secret.md").write_text("secret")
+    (tmp_path / "secret.md").write_text("secret", encoding="utf-8")
     create_pdf = route_endpoint(client.app, "/api/note/pdf", "POST")
     with pytest.raises(HTTPException) as error:
         create_pdf(NoteRequest(path="../../secret"))
@@ -365,14 +368,14 @@ def test_pdf_export_refuses_traversal(app_and_session, tmp_path):
 
 def test_note_reader_refuses_traversal(app_and_session, tmp_path):
     client, _, _ = app_and_session
-    (tmp_path / "secret.md").write_text("secret")
+    (tmp_path / "secret.md").write_text("secret", encoding="utf-8")
     assert client.get("/api/note", params={"path": "../../secret"}).status_code == 403
 
 
 def test_tasks_are_available_to_the_built_in_app(app_and_session):
     client, _, vault = app_and_session
     board = vault / "Tasks" / "Task Board.md"
-    board.write_text(board.read_text().replace(
+    board.write_text(board.read_text(encoding="utf-8").replace(
         "> [!todo]+ Pending — 0\n",
         "> [!todo]+ Pending — 1\n"
         "> > **==Ship it==** · `App` · `HIGH`\n"
@@ -396,7 +399,8 @@ def test_library_chat_fetches_old_meeting_files(app_and_session):
     folder.mkdir(parents=True)
     (folder / "Launch.md").write_text(
         "---\ntags:\n  - meeting\ndate: 2026-07-30\n---\n\n"
-        "# Launch\n\n## Executive Summary\nWe planned the Mumbai launch.\n"
+        "# Launch\n\n## Executive Summary\nWe planned the Mumbai launch.\n",
+        encoding="utf-8",
     )
     body = client.post("/api/library/chat", json={"query": "Mumbai"}).json()
     assert body["sources"][0]["title"] == "Launch"
@@ -431,7 +435,7 @@ def test_regenerate_requires_an_existing_transcript(app_and_session, tmp_path):
 def test_regenerate_writes_a_note(app_and_session, tmp_path, monkeypatch):
     client, _, _ = app_and_session
     transcript = tmp_path / "data" / "transcripts" / "t.txt"
-    transcript.write_text("we discussed things")
+    transcript.write_text("we discussed things", encoding="utf-8")
 
     from beyondmeetings import server as server_mod
     from beyondmeetings.models import MeetingNote
@@ -452,7 +456,7 @@ def test_regenerate_surfaces_a_provider_failure_as_400(app_and_session, tmp_path
                                                        monkeypatch):
     client, _, _ = app_and_session
     transcript = tmp_path / "data" / "transcripts" / "t.txt"
-    transcript.write_text("text")
+    transcript.write_text("text", encoding="utf-8")
 
     from beyondmeetings import server as server_mod
 
@@ -477,7 +481,7 @@ def test_regenerate_refuses_a_path_outside_the_transcripts_dir(app_and_session,
                                                                tmp_path):
     """Reading any path and posting it to an LLM is an exfiltration primitive."""
     secret = tmp_path / "id_rsa"
-    secret.write_text("PRIVATE KEY")
+    secret.write_text("PRIVATE KEY", encoding="utf-8")
     client, _, _ = app_and_session
     response = client.post("/api/regenerate", json={"transcript": str(secret)})
     assert response.status_code == 403

@@ -104,7 +104,7 @@ def test_mcp_fix_registers_into_each_detected_agent(monkeypatch, tmp_path):
     monkeypatch.setattr("beyondmeetings.doctor.mcp.detect_agents", lambda: ["claude"])
     check = McpCheck(Config(vault_path=str(tmp_path)), home=tmp_path, use_cli=False)
     assert check.fix().status == "ok"
-    data = json.loads((tmp_path / ".claude.json").read_text())
+    data = json.loads((tmp_path / ".claude.json").read_text(encoding="utf-8"))
     assert "beyondmeetings-vault" in data["mcpServers"]
 
 
@@ -127,6 +127,6 @@ def test_mcp_uses_the_app_owned_library_without_manual_selection(monkeypatch, tm
 def test_mcp_survives_a_corrupt_agent_config(monkeypatch, tmp_path):
     """A broken config must report unregistered, not crash the wizard."""
     monkeypatch.setattr("beyondmeetings.doctor.mcp.detect_agents", lambda: ["claude"])
-    (tmp_path / ".claude.json").write_text("{ not json")
+    (tmp_path / ".claude.json").write_text("{ not json", encoding="utf-8")
     check = McpCheck(Config(vault_path=str(tmp_path)), home=tmp_path, use_cli=False)
     assert check.detect().status == "missing"

@@ -272,7 +272,7 @@ def test_a_corrupt_state_file_reports_an_error_rather_than_raising(tmp_path):
     """Raising here used to 500 every poll and wedge the UI."""
     recorder = _recorder(tmp_path)
     recorder.state_path.parent.mkdir(parents=True, exist_ok=True)
-    recorder.state_path.write_text("{not json")
+    recorder.state_path.write_text("{not json", encoding="utf-8")
 
     assert recorder.status() is None
     assert "corrupt" in recorder.state_error
@@ -290,7 +290,7 @@ def test_reset_forgets_a_wedged_recording(tmp_path):
 def test_reset_survives_a_corrupt_state_file(tmp_path):
     recorder = _recorder(tmp_path)
     recorder.state_path.parent.mkdir(parents=True, exist_ok=True)
-    recorder.state_path.write_text("{not json")
+    recorder.state_path.write_text("{not json", encoding="utf-8")
 
     recorder.reset()
 
@@ -304,7 +304,7 @@ def test_the_helper_is_found_inside_the_app_bundle(tmp_path):
     bundle = tmp_path / "Applications" / "beyondMeetings.app" / "Contents" / "MacOS"
     bundle.mkdir(parents=True)
     helper = bundle / "bmcapture"
-    helper.write_text("")
+    helper.write_text("", encoding="utf-8")
     helper.chmod(0o755)
 
     assert resolve_helper(home=tmp_path) == str(helper)

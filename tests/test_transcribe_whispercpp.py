@@ -6,7 +6,7 @@ from beyondmeetings.transcribe.whispercpp import (
 
 
 def _executable(path):
-    path.write_text("#!/bin/sh\n")
+    path.write_text("#!/bin/sh\n", encoding="utf-8")
     path.chmod(0o755)
     return path
 

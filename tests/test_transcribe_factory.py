@@ -24,7 +24,7 @@ def test_groq_without_a_key_raises_actionably(monkeypatch):
 
 def test_builds_whispercpp_when_configured(tmp_path):
     binary = tmp_path / "whisper-cli"
-    binary.write_text("")
+    binary.write_text("", encoding="utf-8")
     binary.chmod(0o755)
     cfg = Config(transcriber="whispercpp", whisper_binary=str(binary))
     built = build_transcriber(cfg)

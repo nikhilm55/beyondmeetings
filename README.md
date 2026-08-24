@@ -291,7 +291,7 @@ Run `beyondmeetings doctor` at any time to see what is missing.
 |---|---|---|
 | **Linux** | PipeWire null sink | Supported and in daily use |
 | **macOS 13+** | ScreenCaptureKit + AVFoundation | Implemented, **not yet verified on hardware** |
-| **Windows 10+/11** | WASAPI loopback + microphone | One-line install, tested in CI; **capture not yet verified on hardware** |
+| **Windows 10+/11** | WASAPI loopback + microphone | One-line install; suite runs on Windows in CI; **capture not yet verified on hardware** |
 
 Everything above the capture layer — transcription, analysis, notes, task
 board, dashboard — is shared, so a new platform is one backend and its

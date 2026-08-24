@@ -12,7 +12,8 @@ def _write(vault, day, title, summary="A summary.", tags="  - Acme"):
     folder.mkdir(parents=True, exist_ok=True)
     (folder / f"{title}.md").write_text(
         f"---\ntags:\n  - meeting\n{tags}\ndate: {day}\n---\n\n"
-        f"# {title}\n\n## Executive Summary\n{summary}\n\n## Decisions Made\n- x\n"
+        f"# {title}\n\n## Executive Summary\n{summary}\n\n## Decisions Made\n- x\n",
+        encoding="utf-8",
     )
 
 
@@ -59,11 +60,11 @@ def test_missing_meetings_dir_returns_empty(tmp_path):
 def test_backlink_appends_to_existing_followups_section(tmp_path):
     _write(tmp_path, "2026-07-29", "Prev")
     path = tmp_path / "Meetings" / "2026-07-29" / "Prev.md"
-    path.write_text(path.read_text() + "\n## Follow-ups\n- Something earlier.\n\n---\n")
+    path.write_text(path.read_text(encoding="utf-8") + "\n## Follow-ups\n- Something earlier.\n\n---\n")
     append_followup_backlink(
         path, MeetingRef(date="2026-07-30", title="Next Meeting")
     )
-    text = path.read_text()
+    text = path.read_text(encoding="utf-8")
     assert "- Something earlier." in text
     assert "- Followed up in: [[Meetings/2026-07-30/Next Meeting]]" in text
 
@@ -74,7 +75,7 @@ def test_backlink_creates_followups_section_when_absent(tmp_path):
     append_followup_backlink(
         path, MeetingRef(date="2026-07-30", title="Next Meeting")
     )
-    text = path.read_text()
+    text = path.read_text(encoding="utf-8")
     assert "## Follow-ups" in text
     assert "- Followed up in: [[Meetings/2026-07-30/Next Meeting]]" in text
 
@@ -86,7 +87,7 @@ def test_backlink_never_lands_inside_the_frontmatter(tmp_path):
     append_followup_backlink(
         path, MeetingRef(date="2026-07-30", title="Next Meeting")
     )
-    text = path.read_text()
+    text = path.read_text(encoding="utf-8")
     _, _, after_frontmatter = text.partition("---\n")
     front, sep, body = after_frontmatter.partition("\n---")
     assert sep, "frontmatter fence must still be intact"
@@ -97,11 +98,11 @@ def test_backlink_never_lands_inside_the_frontmatter(tmp_path):
 def test_backlink_preserves_the_frontmatter_verbatim(tmp_path):
     _write(tmp_path, "2026-07-29", "Prev")
     path = tmp_path / "Meetings" / "2026-07-29" / "Prev.md"
-    original_front = path.read_text().split("\n---", 1)[0]
+    original_front = path.read_text(encoding="utf-8").split("\n---", 1)[0]
     append_followup_backlink(
         path, MeetingRef(date="2026-07-30", title="Next Meeting")
     )
-    assert path.read_text().split("\n---", 1)[0] == original_front
+    assert path.read_text(encoding="utf-8").split("\n---", 1)[0] == original_front
 
 
 def test_backlink_keeps_body_content_intact(tmp_path):
@@ -110,7 +111,7 @@ def test_backlink_keeps_body_content_intact(tmp_path):
     append_followup_backlink(
         path, MeetingRef(date="2026-07-30", title="Next Meeting")
     )
-    text = path.read_text()
+    text = path.read_text(encoding="utf-8")
     assert "# Prev" in text
     assert "## Executive Summary\nA summary." in text
     assert "## Decisions Made\n- x" in text
@@ -122,7 +123,7 @@ def test_backlink_is_not_duplicated_on_repeat(tmp_path):
     ref = MeetingRef(date="2026-07-30", title="Next Meeting")
     append_followup_backlink(path, ref)
     append_followup_backlink(path, ref)
-    assert path.read_text().count("Followed up in:") == 1
+    assert path.read_text(encoding="utf-8").count("Followed up in:") == 1
 
 
 # --- Review finding #3: back-link landed in the wrong section ---
@@ -138,9 +139,9 @@ FULL_NOTE = (
 
 def _apply(tmp_path, body):
     path = tmp_path / "Prev.md"
-    path.write_text(body)
+    path.write_text(body, encoding="utf-8")
     append_followup_backlink(path, MeetingRef(date="2026-07-30", title="Part 2"))
-    return path.read_text()
+    return path.read_text(encoding="utf-8")
 
 
 def test_backlink_lands_under_followups_not_the_last_section(tmp_path):
@@ -190,8 +191,8 @@ def test_heading_only_inside_a_code_fence_is_ignored(tmp_path):
 
 def test_still_idempotent_with_the_new_placement(tmp_path):
     path = tmp_path / "Prev.md"
-    path.write_text(FULL_NOTE)
+    path.write_text(FULL_NOTE, encoding="utf-8")
     ref = MeetingRef(date="2026-07-30", title="Part 2")
     append_followup_backlink(path, ref)
     append_followup_backlink(path, ref)
-    assert path.read_text().count("Followed up in:") == 1
+    assert path.read_text(encoding="utf-8").count("Followed up in:") == 1

@@ -127,6 +127,58 @@ the data directory, so `config.toml` sits inside the folder holding recordings.
 - `docs/windows-smoke-test.md` covers what no CI can: real loopback capture,
   the tray, the shortcut, a login cycle, and that uninstall keeps recordings.
 
+## What the first CI run found
+
+The Windows job earned its place immediately. Of 69 failures and 56 errors, the
+dominant cause — 168 occurrences — was one real bug:
+
+**`vault/scaffold.py` wrote the Home template without an encoding.** The
+template contains `←`, and Windows defaults to cp1252, so
+`UnicodeEncodeError: 'charmap' codec can't encode character '\u2190'` fired
+before any of the audio work this design is about. A Windows user could not
+create a vault at all. Two more sites had the same gap on the read side
+(`mcp_setup.py`) and in the Windows recording path itself
+(`audio/base.py`, which persists meeting names to the state file).
+
+Every `read_text`/`write_text` in `src/` and `tests/` is now explicit about
+encoding. Setting `PYTHONUTF8=1` in CI would have been a one-line alternative
+and was rejected: it would have hidden exactly this bug, and would hide the
+next one.
+
+The Linux job found a pre-existing failure too: `install.sh` violated
+shellcheck's SC1087 (`"$SCRIPT_DIR[desktop]"` reads as an array subscript),
+invisible locally because this machine has no shellcheck installed, and the
+repo's own test skips when it is absent.
+
+## Review fixes
+
+- **`uninstall.ps1` deleted the program before purging keys**, so `-PurgeKeys`
+  always reported "already gone" while `-DryRun` claimed success. The purge now
+  runs first, before the Python it depends on is removed.
+- **`uninstall.ps1` removed the whole bin directory** with `-Recurse`. Fine for
+  the default dedicated path, destructive for anyone who pointed
+  `BEYONDMEETINGS_BIN` at a shared `~\bin`. It now removes only its own shim,
+  and the directory solely if empty — matching `uninstall.sh`, which removes a
+  single symlink.
+- **`2>&1 | Out-Null` was unsafe under `$ErrorActionPreference = "Stop"`.** On
+  PowerShell 5.1 — what stock Windows 11 ships, and therefore what the `irm`
+  line lands in — that turns a native command's stderr into terminating errors.
+  Two sites sat outside any try/catch, so a stray warning from the Python child
+  would abort the installer after a successful install, before the app opened.
+  All are now `2>$null`.
+- **The shim was written as ASCII**, mangling a path like `C:\Users\Müller`
+  into a broken `.cmd` while the Start Menu shortcut still worked. Now `Oem`.
+- **The WSL hint was wrong**: `BEYONDMEETINGS_ALLOW_WSL=1 curl … | bash` sets
+  the variable for `curl`, not `bash`. Both the script and the smoke test now
+  show `curl … | BEYONDMEETINGS_ALLOW_WSL=1 bash`.
+- **The new shortcut tests hardcoded forward slashes.** `Path("C:/bm.exe")`
+  stringifies with backslashes on Windows, so three of them could never pass
+  there. Expectations are now built from the `Path`.
+
+One review item did not hold up: `pipeline.py:71` was reported as missing an
+encoding, but the argument is on line 79 of the same call. `discussion.py` and
+`desktop.py` were already explicit too.
+
 ## Known limits
 
 - Neither `install.ps1` nor `uninstall.ps1` has been executed. No PowerShell

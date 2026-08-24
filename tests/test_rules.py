@@ -9,13 +9,13 @@ def test_all_three_files_are_written(tmp_path):
 
 def test_every_file_has_identical_content(tmp_path):
     write_rules(tmp_path, vault_path="/v")
-    bodies = {(tmp_path / n).read_text() for n in FILENAMES}
+    bodies = {(tmp_path / n).read_text(encoding="utf-8") for n in FILENAMES}
     assert len(bodies) == 1
 
 
 def test_content_is_marked_generated(tmp_path):
     write_rules(tmp_path, vault_path="/v")
-    assert "do not edit" in (tmp_path / "CLAUDE.md").read_text().lower()
+    assert "do not edit" in (tmp_path / "CLAUDE.md").read_text(encoding="utf-8").lower()
 
 
 def test_rules_drive_the_cli_rather_than_reimplementing_it():
@@ -37,9 +37,9 @@ def test_link_convention_is_documented():
 
 
 def test_existing_files_are_overwritten(tmp_path):
-    (tmp_path / "CLAUDE.md").write_text("stale content")
+    (tmp_path / "CLAUDE.md").write_text("stale content", encoding="utf-8")
     write_rules(tmp_path, vault_path="/v")
-    assert "stale content" not in (tmp_path / "CLAUDE.md").read_text()
+    assert "stale content" not in (tmp_path / "CLAUDE.md").read_text(encoding="utf-8")
 
 
 def test_rules_do_not_reimplement_the_pipeline(tmp_path):

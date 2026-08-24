@@ -23,7 +23,7 @@ def test_the_swift_source_is_in_the_source_tree():
 
 def test_install_sh_builds_the_helper_from_the_installed_package():
     """Not from the repo — a curl | bash user has no checkout."""
-    script = (ROOT / "install.sh").read_text()
+    script = (ROOT / "install.sh").read_text(encoding="utf-8")
 
     assert "bmcapture.swift" in script
     assert "swiftc" in script
@@ -35,7 +35,7 @@ def test_install_sh_builds_the_helper_from_the_installed_package():
 
 def test_install_sh_survives_a_mac_without_xcode_tools():
     """Missing swiftc must degrade, not abort — the rest of the app still works."""
-    script = (ROOT / "install.sh").read_text()
+    script = (ROOT / "install.sh").read_text(encoding="utf-8")
 
     assert "xcode-select --install" in script
 

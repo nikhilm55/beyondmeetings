@@ -19,7 +19,11 @@ def test_rules_not_required(tmp_path):
 
 
 def test_registry_returns_checks_in_a_stable_order(tmp_path):
-    ids = [c.id for c in build_checks(Config(), config_path=tmp_path / "c.toml")]
+    # Pinned to linux: without it this asserts the host's platform, so it
+    # expected "pipewire" and got "windows_audio" on the Windows CI runner.
+    ids = [c.id for c in build_checks(
+        Config(), config_path=tmp_path / "c.toml", platform="linux"
+    )]
     assert ids == [
         "provider_choice", "transcriber_choice",
         "pipewire", "ffmpeg",

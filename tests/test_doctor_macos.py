@@ -4,6 +4,10 @@ The checks themselves are filesystem and subprocess work, so they run here.
 What cannot be verified without a Mac is whether the permissions they report
 mean what we think they mean.
 """
+import sys
+
+import pytest
+
 from beyondmeetings.config import Config
 from beyondmeetings.doctor.macos import (
     AppBundleCheck,
@@ -12,6 +16,13 @@ from beyondmeetings.doctor.macos import (
     ScreenRecordingPermissionCheck,
 )
 from beyondmeetings.doctor.registry import build_checks
+
+# The permission checks execute a shell-script stand-in for bmcapture, which
+# Windows cannot run ("%1 is not a valid Win32 application"). The condition
+# fires only on win32, so Linux and macOS runs are unchanged.
+pytestmark = pytest.mark.skipif(
+    sys.platform == "win32", reason="these checks execute a shell helper; macOS-only"
+)
 
 
 def _fake_helper(tmp_path, payload):

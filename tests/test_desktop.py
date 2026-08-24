@@ -80,7 +80,7 @@ def test_install_writes_both_the_entry_and_the_icon(tmp_path):
 
 def test_entry_is_a_valid_desktop_file(tmp_path):
     install_desktop_entry(tmp_path)
-    text = desktop_entry_path(tmp_path).read_text()
+    text = desktop_entry_path(tmp_path).read_text(encoding="utf-8")
     assert text.startswith("[Desktop Entry]")
     assert "Type=Application" in text
     assert f"Icon={APP_ID}" in text
@@ -89,7 +89,7 @@ def test_entry_is_a_valid_desktop_file(tmp_path):
 
 def test_entry_calls_native_app_not_browser_launcher(tmp_path):
     install_desktop_entry(tmp_path)
-    text = desktop_entry_path(tmp_path).read_text()
+    text = desktop_entry_path(tmp_path).read_text(encoding="utf-8")
     assert " app" in text
     assert "serve" not in text
 
@@ -98,7 +98,7 @@ def test_entry_uses_an_absolute_executable_path(tmp_path):
     """A desktop session often lacks ~/.local/bin on PATH."""
     install_desktop_entry(tmp_path)
     exec_line = next(
-        l for l in desktop_entry_path(tmp_path).read_text().splitlines()
+        l for l in desktop_entry_path(tmp_path).read_text(encoding="utf-8").splitlines()
         if l.startswith("Exec=")
     )
     assert exec_line.removeprefix("Exec=").startswith("/")
@@ -109,7 +109,7 @@ def test_icon_is_scalable_svg(tmp_path):
     icon = icon_install_path(tmp_path)
     assert icon.suffix == ".svg"
     assert "scalable" in str(icon)
-    assert icon.read_text().lstrip().startswith("<svg")
+    assert icon.read_text(encoding="utf-8").lstrip().startswith("<svg")
 
 
 def test_install_is_idempotent(tmp_path):
@@ -291,7 +291,8 @@ def test_open_browser_really_reaches_the_browser(tmp_path, monkeypatch):
     fake = tmp_path / "fake_browser.py"
     fake.write_text(
         "import pathlib, sys\n"
-        f"pathlib.Path({str(marker)!r}).write_text(sys.argv[1])\n"
+        f"pathlib.Path({str(marker)!r}).write_text(sys.argv[1])\n",
+        encoding="utf-8",
     )
     monkeypatch.setenv("BROWSER", f"{sys.executable} {fake} %s")
     # BROWSER is read once per process, on first use — which may already have
@@ -303,4 +304,4 @@ def test_open_browser_really_reaches_the_browser(tmp_path, monkeypatch):
     while time.monotonic() < deadline and not marker.exists():
         time.sleep(0.05)
     assert marker.exists(), "the child interpreter never handed the URL over"
-    assert marker.read_text() == URL
+    assert marker.read_text(encoding="utf-8") == URL

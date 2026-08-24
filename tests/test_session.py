@@ -149,8 +149,8 @@ def test_stop_preserves_when_the_meeting_was_recorded(manager, tmp_path):
     manager.start("Test Meeting")
     manager.run_stop()
     note = tmp_path / "vault" / "Meetings" / "2026-07-30" / "Test Meeting.md"
-    assert 'recorded_at: "2026-07-30T10:00:00"' in note.read_text()
-    assert "transcript: 2026-07-30/2026-07-30_10-00_test1.txt" in note.read_text()
+    assert 'recorded_at: "2026-07-30T10:00:00"' in note.read_text(encoding="utf-8")
+    assert "transcript: 2026-07-30/2026-07-30_10-00_test1.txt" in note.read_text(encoding="utf-8")
 
 
 def test_stop_writes_the_transcript_to_the_data_dir(manager, tmp_path):
@@ -158,13 +158,13 @@ def test_stop_writes_the_transcript_to_the_data_dir(manager, tmp_path):
     manager.run_stop()
     transcripts = list((tmp_path / "data" / "transcripts").rglob("*.txt"))
     assert len(transcripts) == 1
-    assert transcripts[0].read_text() == "the transcript"
+    assert transcripts[0].read_text(encoding="utf-8") == "the transcript"
 
 
 def test_stop_adds_tasks_to_the_board(manager, tmp_path):
     manager.start("Test")
     manager.run_stop()
-    board = (tmp_path / "vault" / "Tasks" / "Task Board.md").read_text()
+    board = (tmp_path / "vault" / "Tasks" / "Task Board.md").read_text(encoding="utf-8")
     assert "**==Ship it==**" in board
 
 

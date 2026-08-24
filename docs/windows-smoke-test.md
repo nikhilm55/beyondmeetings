@@ -108,4 +108,7 @@ recordings while "clearing settings".
 |---|---|---|---|
 | 7.1 | `curl -fsSL <install.sh> \| bash` in **Git Bash** | Refuses, prints the PowerShell line, creates nothing | |
 | 7.2 | Same command in **WSL** | Refuses, mentions `BEYONDMEETINGS_ALLOW_WSL=1` | |
-| 7.3 | `BEYONDMEETINGS_ALLOW_WSL=1 curl … \| bash` in WSL | Proceeds with the Linux install | |
+| 7.3 | `curl … \| BEYONDMEETINGS_ALLOW_WSL=1 bash` in WSL | Proceeds with the Linux install | |
+
+The variable goes on `bash`, not on `curl`. `VAR=1 curl … | bash` sets it for
+the download process only, so the installer never sees it and 7.3 would fail.

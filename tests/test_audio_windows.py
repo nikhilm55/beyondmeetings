@@ -34,7 +34,7 @@ def test_windows_records_segmented_wav_files(tmp_path):
 def test_windows_reset_clears_corrupt_state(tmp_path):
     recorder = WindowsRecorder(tmp_path, runner=Runner())
     recorder.state_path.parent.mkdir(parents=True, exist_ok=True)
-    recorder.state_path.write_text("not json")
+    recorder.state_path.write_text("not json", encoding="utf-8")
     assert recorder.status() is None
     assert recorder.state_error
     recorder.reset()

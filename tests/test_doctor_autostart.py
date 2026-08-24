@@ -21,12 +21,12 @@ def test_fix_writes_a_desktop_entry(tmp_path):
     assert check.fix().status == "ok"
     entry = tmp_path / ".config" / "autostart" / "beyondmeetings.desktop"
     assert entry.is_file()
-    assert "beyondmeetings" in entry.read_text()
+    assert "beyondmeetings" in entry.read_text(encoding="utf-8")
 
 
 def test_entry_is_a_valid_desktop_file(tmp_path):
     AutostartCheck(Config(), home=tmp_path).fix()
-    text = (tmp_path / ".config" / "autostart" / "beyondmeetings.desktop").read_text()
+    text = (tmp_path / ".config" / "autostart" / "beyondmeetings.desktop").read_text(encoding="utf-8")
     assert text.startswith("[Desktop Entry]")
     assert "Type=Application" in text
     assert "Exec=" in text
@@ -35,13 +35,13 @@ def test_entry_is_a_valid_desktop_file(tmp_path):
 def test_entry_does_not_open_a_browser_at_login(tmp_path):
     """Logging in should not fling a browser tab at the user."""
     AutostartCheck(Config(), home=tmp_path).fix()
-    text = (tmp_path / ".config" / "autostart" / "beyondmeetings.desktop").read_text()
+    text = (tmp_path / ".config" / "autostart" / "beyondmeetings.desktop").read_text(encoding="utf-8")
     assert "--no-browser" in text
 
 
 def test_entry_keeps_the_global_recording_indicator_enabled(tmp_path):
     AutostartCheck(Config(), home=tmp_path).fix()
-    text = (tmp_path / ".config" / "autostart" / "beyondmeetings.desktop").read_text()
+    text = (tmp_path / ".config" / "autostart" / "beyondmeetings.desktop").read_text(encoding="utf-8")
     assert "--no-tray" not in text
 
 

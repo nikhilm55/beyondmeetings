@@ -29,7 +29,7 @@ def _requires_python_floor() -> tuple[int, int]:
 def _modules_importing(name: str, *roots: Path) -> list[Path]:
     return [
         path for root in (roots or (SRC,)) for path in root.rglob("*.py")
-        if re.search(rf"^\s*import {name}\b", path.read_text(), re.MULTILINE)
+        if re.search(rf"^\s*import {name}\b", path.read_text(encoding="utf-8"), re.MULTILINE)
     ]
 
 
@@ -44,7 +44,7 @@ def test_tomllib_importers_have_a_fallback_below_311():
 
     missing = [
         path.relative_to(ROOT) for path in _modules_importing("tomllib", SRC, TESTS)
-        if "import tomli as tomllib" not in path.read_text()
+        if "import tomli as tomllib" not in path.read_text(encoding="utf-8")
     ]
     assert not missing, (
         f"{missing} import tomllib with no fallback, but requires-python still "
