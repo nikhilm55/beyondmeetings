@@ -49,7 +49,7 @@ function Say([string]$Message) { Write-Host "  $Message" }
 
 function Invoke-Quiet {
     param([string]$Exe, [string[]]$Arguments)
-    & $Exe @Arguments 2>&1 | Out-Null
+    & $Exe @Arguments 2>$null
     return $LASTEXITCODE
 }
 
@@ -117,7 +117,10 @@ Install Python $MinVersion or newer from https://www.python.org/downloads/
     Say "Falling back to uv, which installs its own Python."
     $UsingUv = $true
 } else {
-    $shown = (& $Interpreter.Exe @($Interpreter.Prefix + @("--version")) 2>&1)
+    # 2>$null, not 2>&1: under $ErrorActionPreference = "Stop", PowerShell 5.1
+    # turns a native command's stderr into terminating errors. Python 3 prints
+    # its version to stdout, so nothing is lost.
+    $shown = (& $Interpreter.Exe @($Interpreter.Prefix + @("--version")) 2>$null)
     Say "Using system Python: $shown"
 }
 
@@ -174,7 +177,7 @@ if ($LASTEXITCODE -ne 0) {
 @"
 @echo off
 "$Command" %*
-"@ | Set-Content -Path $Shim -Encoding ASCII
+"@ | Set-Content -Path $Shim -Encoding Oem
 Say "Installed the beyondmeetings command to $BinDir"
 
 $onPath = ($env:Path -split ";" | Where-Object { $_ -and $_.TrimEnd("\") -ieq $BinDir.TrimEnd("\") })
@@ -198,10 +201,10 @@ try {
 from beyondmeetings.desktop_windows import install_startup_shortcut, startup_shortcut_path
 if startup_shortcut_path().is_file():
     install_startup_shortcut()
-'@ 2>&1 | Out-Null
+'@ 2>$null
 
 Write-Host ""
-& $VenvPython -c "import sys; from beyondmeetings.desktop import server_is_running; sys.exit(0 if server_is_running() else 1)" 2>&1 | Out-Null
+& $VenvPython -c "import sys; from beyondmeetings.desktop import server_is_running; sys.exit(0 if server_is_running() else 1)" 2>$null
 if ($LASTEXITCODE -eq 0) {
     Say "beyondMeetings is already running — open http://127.0.0.1:7788/setup"
     exit 0

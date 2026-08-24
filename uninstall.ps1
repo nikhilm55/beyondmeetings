@@ -31,6 +31,7 @@ $BinDir = if ($env:BEYONDMEETINGS_BIN) {
 $Venv = Join-Path $InstallRoot "venv"
 $VenvPython = Join-Path $Venv "Scripts\python.exe"
 $Command = Join-Path $Venv "Scripts\beyondmeetings.exe"
+$Shim = Join-Path $BinDir "beyondmeetings.cmd"
 
 function Say([string]$Message) { Write-Host "  $Message" }
 
@@ -95,15 +96,13 @@ if (-not $StartupLink) {
 # A recording in progress would otherwise leave an orphaned capture worker
 # behind, still holding the WAV open.
 if ((-not $DryRun) -and (Test-Path $Command)) {
-    try { & $Command stop 2>&1 | Out-Null } catch { }
+    try { & $Command stop 2>$null } catch { }
 }
 
-Remove-Thing $StartupLink "start-at-login shortcut"
-Remove-Thing $StartMenu   "Start Menu shortcut"
-Remove-Thing $BinDir      "command shim"
-Remove-Thing $InstallRoot "program files"
-Remove-Thing $ConfigFile  "settings"
-
+# Keys first, because deleting them runs through the app's own Python, which
+# the removals below delete. Doing it afterwards meant every real run reported
+# "already gone" and silently left the keys in Credential Manager, while
+# -DryRun cheerfully claimed they had been removed.
 if ($PurgeKeys) {
     if ($DryRun) {
         Say "would remove: stored API keys"
@@ -115,7 +114,7 @@ for name in ("groq_api_key", "anthropic_api_key", "openai_api_key", "gemini_api_
         keyring.delete_password("beyondmeetings", name)
     except Exception:
         pass
-'@ 2>&1 | Out-Null
+'@ 2>$null
         Say "removed: stored API keys"
     } else {
         Say "cannot remove keys: the application is already gone"
@@ -123,6 +122,26 @@ for name in ("groq_api_key", "anthropic_api_key", "openai_api_key", "gemini_api_
 } else {
     Say "kept: stored API keys (-PurgeKeys to remove)"
 }
+
+Remove-Thing $StartupLink "start-at-login shortcut"
+Remove-Thing $StartMenu   "Start Menu shortcut"
+
+# Only our own shim, never the whole directory: install.ps1 honours
+# BEYONDMEETINGS_BIN, so this can be a shared bin folder holding unrelated
+# executables. uninstall.sh removes a single symlink for the same reason.
+Remove-Thing $Shim "command shim"
+if ((Test-Path -LiteralPath $BinDir) -and
+    -not (Get-ChildItem -LiteralPath $BinDir -Force -ErrorAction SilentlyContinue)) {
+    if ($DryRun) {
+        Say "would remove: empty command directory ($BinDir)"
+    } else {
+        Remove-Item -LiteralPath $BinDir -Force -ErrorAction SilentlyContinue
+        Say "removed: empty command directory"
+    }
+}
+
+Remove-Thing $InstallRoot "program files"
+Remove-Thing $ConfigFile  "settings"
 
 if ($PurgeData) {
     Remove-Thing $DataDir "recordings and transcripts"
