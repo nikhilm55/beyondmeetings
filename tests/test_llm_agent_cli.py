@@ -94,7 +94,7 @@ def test_missing_binary_is_reported_actionably(monkeypatch):
 def test_finds_a_user_binary_outside_the_desktop_path(tmp_path, monkeypatch):
     binary = tmp_path / ".local" / "bin" / "codex"
     binary.parent.mkdir(parents=True)
-    binary.write_text("#!/bin/sh\n")
+    binary.write_text("#!/bin/sh\n", encoding="utf-8")
     binary.chmod(0o755)
     monkeypatch.setattr("pathlib.Path.home", lambda: tmp_path)
     monkeypatch.setattr("shutil.which", lambda n: None)
@@ -108,7 +108,7 @@ def test_finds_codex_bundled_with_the_openai_editor_extension(tmp_path, monkeypa
         / "bin" / "linux-x86_64" / "codex"
     )
     binary.parent.mkdir(parents=True)
-    binary.write_text("#!/bin/sh\n")
+    binary.write_text("#!/bin/sh\n", encoding="utf-8")
     binary.chmod(0o755)
     monkeypatch.setattr("pathlib.Path.home", lambda: tmp_path)
     monkeypatch.setattr("shutil.which", lambda n: None)
@@ -119,7 +119,7 @@ def test_finds_codex_bundled_with_the_openai_editor_extension(tmp_path, monkeypa
 def test_runs_the_discovered_absolute_binary(tmp_path, monkeypatch):
     binary = tmp_path / ".local" / "bin" / "codex"
     binary.parent.mkdir(parents=True)
-    binary.write_text("#!/bin/sh\n")
+    binary.write_text("#!/bin/sh\n", encoding="utf-8")
     binary.chmod(0o755)
     calls = []
     monkeypatch.setattr("pathlib.Path.home", lambda: tmp_path)

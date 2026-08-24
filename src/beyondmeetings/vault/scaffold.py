@@ -66,8 +66,12 @@ def scaffold_vault(vault: Path) -> None:
 
     board = vault / "Tasks" / "Task Board.md"
     if not board.exists():
-        board.write_text(TASK_BOARD_TEMPLATE.format(today=today))
+        board.write_text(
+            TASK_BOARD_TEMPLATE.format(today=today), encoding="utf-8"
+        )
 
     home = vault / "Home.md"
     if not home.exists():
-        home.write_text(HOME_TEMPLATE.format(today=today))
+        home.write_text(
+            HOME_TEMPLATE.format(today=today), encoding="utf-8"
+        )

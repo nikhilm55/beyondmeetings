@@ -79,7 +79,9 @@ def install_app_bundle(home: Path | None = None, helper: Path | None = None) -> 
         plistlib.dump(info_plist(), fh)
 
     launcher = macos_dir / APP_NAME
-    launcher.write_text(LAUNCHER.format(executable=resolve_executable()))
+    launcher.write_text(
+        LAUNCHER.format(executable=resolve_executable()), encoding="utf-8"
+    )
     _make_executable(launcher)
 
     if helper is not None:

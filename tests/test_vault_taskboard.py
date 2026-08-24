@@ -86,7 +86,7 @@ def test_blank_line_after_header_is_preserved(tmp_path):
     from beyondmeetings.vault.scaffold import scaffold_vault
 
     scaffold_vault(tmp_path)
-    board = (tmp_path / "Tasks" / "Task Board.md").read_text()
+    board = (tmp_path / "Tasks" / "Task Board.md").read_text(encoding="utf-8")
     out = add_tasks(board, [ActionItem(task="A")], REF, "d")
     assert "> >\n\n> [!success]- Done — 0" in out
 
@@ -95,7 +95,7 @@ def test_insertion_into_an_empty_pending_callout_keeps_later_sections(tmp_path):
     from beyondmeetings.vault.scaffold import scaffold_vault
 
     scaffold_vault(tmp_path)
-    board = (tmp_path / "Tasks" / "Task Board.md").read_text()
+    board = (tmp_path / "Tasks" / "Task Board.md").read_text(encoding="utf-8")
     out = add_tasks(board, [ActionItem(task="A")], REF, "d")
     assert "> [!success]- Done — 0" in out
     assert "> [!danger]+ Blocked — 0" in out

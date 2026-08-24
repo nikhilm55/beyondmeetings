@@ -85,5 +85,11 @@ def build_checks(
     # file mean nothing on macOS, where the .app bundle covers the same ground.
     if not macos and not windows:
         checks += [DesktopLauncherCheck(config), AutostartCheck(config)]
+    elif windows:
+        # Same two ids (launcher, autostart) backed by Start Menu and Startup
+        # shortcuts, so doctor can repair Windows integration too.
+        from .windows import StartMenuShortcutCheck, WindowsAutostartCheck
+
+        checks += [StartMenuShortcutCheck(), WindowsAutostartCheck()]
 
     return checks

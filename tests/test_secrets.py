@@ -1,3 +1,5 @@
+import pytest
+import sys
 import os
 import stat
 
@@ -36,6 +38,9 @@ def test_falls_back_to_file_when_keyring_broken(monkeypatch, tmp_path):
     assert secrets_mod.get_secret("groq_api_key", fallback_dir=tmp_path) == "gsk_fallback"
 
 
+@pytest.mark.skipif(
+    sys.platform == "win32", reason="POSIX file modes do not exist on Windows"
+)
 def test_fallback_file_is_owner_only(monkeypatch, tmp_path):
     monkeypatch.setattr(secrets_mod, "keyring", FakeKeyring(working=False))
     secrets_mod.set_secret("groq_api_key", "gsk_fallback", fallback_dir=tmp_path)
@@ -50,6 +55,9 @@ def test_missing_secret_returns_none(monkeypatch, tmp_path):
 
 # --- Review finding #11: world-readable window; silent keyring fallback ---
 
+@pytest.mark.skipif(
+    sys.platform == "win32", reason="POSIX file modes do not exist on Windows"
+)
 def test_fallback_file_is_never_world_readable_even_briefly(monkeypatch, tmp_path):
     """chmod after write left the key readable for the duration of the write."""
     monkeypatch.setattr(secrets_mod, "keyring", FakeKeyring(working=False))
@@ -66,10 +74,13 @@ def test_fallback_file_is_never_world_readable_even_briefly(monkeypatch, tmp_pat
     assert seen and all(mode == 0o600 for mode in seen), seen
 
 
+@pytest.mark.skipif(
+    sys.platform == "win32", reason="POSIX file modes do not exist on Windows"
+)
 def test_an_existing_loose_file_is_tightened(monkeypatch, tmp_path):
     monkeypatch.setattr(secrets_mod, "keyring", FakeKeyring(working=False))
     path = tmp_path / "secrets.toml"
-    path.write_text("")
+    path.write_text("", encoding="utf-8")
     os.chmod(path, 0o644)
     secrets_mod.set_secret("groq_api_key", "gsk", fallback_dir=tmp_path)
     assert stat.S_IMODE(path.stat().st_mode) == 0o600

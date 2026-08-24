@@ -22,7 +22,7 @@ def test_new_library_setting_wins_during_migration():
 
 def test_loading_an_old_config_migrates_the_vault_field(tmp_path):
     path = tmp_path / "config.toml"
-    path.write_text('vault_path = "/old/notes"\n')
+    path.write_text('vault_path = "/old/notes"\n', encoding="utf-8")
     cfg = load_config(path)
     assert cfg.library_path == "/old/notes"
     assert cfg.vault_path == ""
@@ -35,7 +35,7 @@ def test_save_then_load_round_trips(tmp_path):
     loaded = load_config(path)
     assert loaded.notes_path == "/home/x/Vault"
     assert loaded.projects == ["Acme", "Zenith"]
-    assert "vault_path" not in path.read_text()
+    assert "vault_path" not in path.read_text(encoding="utf-8")
 
 
 def test_save_creates_parent_directories(tmp_path):

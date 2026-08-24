@@ -9,7 +9,8 @@ def _note(vault, day, title, summary="A summary.", tag="Acme"):
     (folder / f"{title}.md").write_text(
         f"---\ntags:\n  - meeting\n  - {tag}\ndate: {day}\n---\n\n"
         f"# {title}\n\n## Executive Summary\n{summary}\n\n"
-        f"## Action Items\n- [ ] **One** — **Sam**\n- [ ] **Two**\n"
+        f"## Action Items\n- [ ] **One** — **Sam**\n- [ ] **Two**\n",
+        encoding="utf-8",
     )
 
 
@@ -31,7 +32,7 @@ def test_lists_a_meeting_with_its_metadata(tmp_path):
 def test_reads_the_recording_time_when_available(tmp_path):
     _note(tmp_path, "2026-07-30", "Standup")
     path = tmp_path / "Meetings" / "2026-07-30" / "Standup.md"
-    path.write_text(path.read_text().replace(
+    path.write_text(path.read_text(encoding="utf-8").replace(
         "date: 2026-07-30", "date: 2026-07-30\nrecorded_at: 2026-07-30T14:30:00"
     ))
     assert list_meetings(tmp_path)[0]["recorded_at"] == "2026-07-30T14:30:00"
@@ -57,14 +58,14 @@ def test_respects_the_limit(tmp_path):
 
 def test_ignores_non_date_folders(tmp_path):
     (tmp_path / "Meetings" / "Templates").mkdir(parents=True)
-    (tmp_path / "Meetings" / "Templates" / "Blank.md").write_text("# Blank")
+    (tmp_path / "Meetings" / "Templates" / "Blank.md").write_text("# Blank", encoding="utf-8")
     assert list_meetings(tmp_path) == []
 
 
 def test_handles_a_note_with_no_summary(tmp_path):
     folder = tmp_path / "Meetings" / "2026-07-30"
     folder.mkdir(parents=True)
-    (folder / "Bare.md").write_text("# Bare\n")
+    (folder / "Bare.md").write_text("# Bare\n", encoding="utf-8")
     row = list_meetings(tmp_path)[0]
     assert row["title"] == "Bare"
     assert row["summary"] == ""
@@ -75,7 +76,8 @@ def test_marks_informal_meetings_with_no_tasks(tmp_path):
     folder.mkdir(parents=True)
     (folder / "Catch-up.md").write_text(
         "---\ntags:\n  - meeting\ndate: 2026-07-30\n---\n\n"
-        "# Catch-up\n\n## Action Items\nNone recorded.\n"
+        "# Catch-up\n\n## Action Items\nNone recorded.\n",
+        encoding="utf-8",
     )
     assert list_meetings(tmp_path)[0]["tasks"] == 0
 

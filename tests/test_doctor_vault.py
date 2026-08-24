@@ -48,6 +48,6 @@ def test_fix_creates_a_path_that_does_not_exist(tmp_path):
 
 
 def test_fix_never_overwrites_an_existing_vault(tmp_path):
-    (tmp_path / "Home.md").write_text("MY REAL HOME")
+    (tmp_path / "Home.md").write_text("MY REAL HOME", encoding="utf-8")
     VaultCheck(Config(), config_path=tmp_path / "c.toml").fix(vault_path=str(tmp_path))
-    assert (tmp_path / "Home.md").read_text() == "MY REAL HOME"
+    assert (tmp_path / "Home.md").read_text(encoding="utf-8") == "MY REAL HOME"

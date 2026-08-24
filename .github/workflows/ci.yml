@@ -1,0 +1,86 @@
+name: CI
+
+on:
+  push:
+    branches: [main, dev, "fix/**", "feat/**", "docs/**"]
+  pull_request:
+
+jobs:
+  tests:
+    name: tests (${{ matrix.os }}, py${{ matrix.python }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      # One platform failing should still report the other's result.
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        # 3.10 is the declared floor (Ubuntu 22.04's system Python) and the
+        # reason config.py still carries the tomli/tomllib fallback.
+        python: ["3.10", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      # The dev extra only: the desktop extra pulls pywebview[qt], which needs
+      # system Qt libraries that runners do not have. tests/test_tray.py is
+      # import-guarded for exactly this case.
+      - name: Install
+        run: python -m pip install -e ".[dev]"
+      - name: Tests
+        run: python -m pytest -q
+
+  installers:
+    name: installers (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+
+      # An installer nobody ran is the likeliest thing in this repo to be
+      # broken, and a typo in it is invisible to pytest.
+      - name: Shell installers parse
+        if: runner.os == 'Linux'
+        run: |
+          bash -n install.sh
+          bash -n uninstall.sh
+
+      - name: install.sh resolves an interpreter
+        if: runner.os == 'Linux'
+        run: bash install.sh --dry-run
+
+      - name: uninstall.sh dry run changes nothing
+        if: runner.os == 'Linux'
+        run: bash uninstall.sh --dry-run
+
+      - name: PowerShell installers parse
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $failed = $false
+          foreach ($file in 'install.ps1', 'uninstall.ps1') {
+              $errors = $null
+              [System.Management.Automation.Language.Parser]::ParseFile(
+                  (Resolve-Path $file), [ref]$null, [ref]$errors) | Out-Null
+              if ($errors) {
+                  $failed = $true
+                  Write-Host "::error::$file failed to parse"
+                  $errors | ForEach-Object { Write-Host "  $_" }
+              } else {
+                  Write-Host "$file parsed cleanly"
+              }
+          }
+          if ($failed) { exit 1 }
+
+      - name: install.ps1 resolves an interpreter
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: ./install.ps1 -DryRun
+
+      - name: uninstall.ps1 dry run changes nothing
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: ./uninstall.ps1 -DryRun

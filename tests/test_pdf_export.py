@@ -20,7 +20,8 @@ def test_export_renders_markdown_as_a_real_pdf(tmp_path):
     note.write_text(
         "---\ndate: 2026-08-17\n---\n\n"
         "# Weekly\n\n## Decisions\n- **Ship** the PDF feature\n"
-        "- [ ] Share the meeting\n"
+        "- [ ] Share the meeting\n",
+        encoding="utf-8",
     )
 
     target = export_meeting_pdf(
@@ -37,7 +38,7 @@ def test_export_renders_markdown_as_a_real_pdf(tmp_path):
 def test_export_can_render_a_separately_named_discussion_summary(tmp_path):
     note = tmp_path / "vault" / "Meetings" / "2026-08-18" / "Review.md"
     note.parent.mkdir(parents=True)
-    note.write_text("# Review\n\n## Executive Summary\nMinutes.\n")
+    note.write_text("# Review\n\n## Executive Summary\nMinutes.\n", encoding="utf-8")
 
     target = export_meeting_pdf(
         tmp_path / "vault",

@@ -19,7 +19,11 @@ def test_rules_not_required(tmp_path):
 
 
 def test_registry_returns_checks_in_a_stable_order(tmp_path):
-    ids = [c.id for c in build_checks(Config(), config_path=tmp_path / "c.toml")]
+    # Pinned to linux: without it this asserts the host's platform, so it
+    # expected "pipewire" and got "windows_audio" on the Windows CI runner.
+    ids = [c.id for c in build_checks(
+        Config(), config_path=tmp_path / "c.toml", platform="linux"
+    )]
     assert ids == [
         "provider_choice", "transcriber_choice",
         "pipewire", "ffmpeg",
@@ -64,13 +68,37 @@ def test_registry_ids_are_unique(tmp_path):
     assert len(ids) == len(set(ids))
 
 
-def test_windows_uses_wasapi_check_not_linux_desktop_checks(tmp_path):
+def test_windows_uses_wasapi_and_shortcut_checks_not_freedesktop_ones(tmp_path):
+    checks = build_checks(
+        Config(), config_path=tmp_path / "c.toml", platform="win32"
+    )
+    by_id = {c.id: type(c).__name__ for c in checks}
+
+    assert "windows_audio" in by_id
+    assert "pipewire" not in by_id
+    # Same ids as Linux so the wizard renders identical rows, but backed by
+    # Start Menu and Startup shortcuts rather than freedesktop files.
+    assert by_id["launcher"] == "StartMenuShortcutCheck"
+    assert by_id["autostart"] == "WindowsAutostartCheck"
+
+
+def test_linux_keeps_the_freedesktop_launcher_and_autostart_checks(tmp_path):
+    checks = build_checks(
+        Config(), config_path=tmp_path / "c.toml", platform="linux"
+    )
+    by_id = {c.id: type(c).__name__ for c in checks}
+
+    assert by_id["launcher"] == "DesktopLauncherCheck"
+    assert by_id["autostart"] == "AutostartCheck"
+    assert "pipewire" in by_id
+    assert "windows_audio" not in by_id
+
+
+def test_windows_check_ids_stay_unique(tmp_path):
     ids = [c.id for c in build_checks(
         Config(), config_path=tmp_path / "c.toml", platform="win32"
     )]
-    assert "windows_audio" in ids
-    assert "pipewire" not in ids
-    assert "launcher" not in ids
+    assert len(ids) == len(set(ids))
 
 
 def test_rules_land_in_the_vault_when_one_is_configured(tmp_path):

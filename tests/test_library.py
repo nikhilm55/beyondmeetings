@@ -20,13 +20,13 @@ def test_task_board_is_exposed_as_structured_local_data(tmp_path):
     scaffold_vault(tmp_path)
     board_path = tmp_path / "Tasks" / "Task Board.md"
     board = add_tasks(
-        board_path.read_text(),
+        board_path.read_text(encoding="utf-8"),
         [ActionItem(task="Ship desktop", owner="Nikhil", project="App",
                     priority="HIGH", due="2026-08-12")],
         MeetingRef(date="2026-08-11", title="Desktop plan"),
         "Finish the cross-platform package.",
     )
-    board_path.write_text(board)
+    board_path.write_text(board, encoding="utf-8")
 
     task = list_tasks(tmp_path)[0]
     assert task["title"] == "Ship desktop"

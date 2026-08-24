@@ -31,10 +31,10 @@ def server_definition(vault_path: str) -> dict:
 
 
 def _load_json(path: Path) -> dict:
-    if not path.is_file() or not path.read_text().strip():
+    if not path.is_file() or not path.read_text(encoding="utf-8").strip():
         return {}
     try:
-        return json.loads(path.read_text())
+        return json.loads(path.read_text(encoding="utf-8"))
     except json.JSONDecodeError as exc:
         raise ValueError(
             f"{path} could not be parsed as JSON ({exc}). Not touching it."

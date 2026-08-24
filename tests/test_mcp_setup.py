@@ -1,3 +1,4 @@
+import sys
 import json
 
 import pytest
@@ -22,7 +23,7 @@ def test_detect_reports_only_installed_agents(monkeypatch):
 
 def test_claude_registration_creates_config_when_absent(tmp_path):
     register_mcp("claude", "/v", home=tmp_path, use_cli=False)
-    data = json.loads((tmp_path / ".claude.json").read_text())
+    data = json.loads((tmp_path / ".claude.json").read_text(encoding="utf-8"))
     assert "beyondmeetings-vault" in data["mcpServers"]
 
 
@@ -33,9 +34,9 @@ def test_claude_registration_preserves_unrelated_keys(tmp_path):
         "numStartups": 42,
         "projects": {"/some/path": {"history": ["a", "b"]}},
         "mcpServers": {"existing": {"command": "foo"}},
-    }))
+    }), encoding="utf-8")
     register_mcp("claude", "/v", home=tmp_path, use_cli=False)
-    data = json.loads(target.read_text())
+    data = json.loads(target.read_text(encoding="utf-8"))
     assert data["numStartups"] == 42
     assert data["projects"]["/some/path"]["history"] == ["a", "b"]
     assert "existing" in data["mcpServers"]
@@ -44,9 +45,9 @@ def test_claude_registration_preserves_unrelated_keys(tmp_path):
 
 def test_claude_registration_writes_a_backup(tmp_path):
     target = tmp_path / ".claude.json"
-    target.write_text('{"numStartups": 7}')
+    target.write_text('{"numStartups": 7}', encoding="utf-8")
     register_mcp("claude", "/v", home=tmp_path, use_cli=False)
-    backup = json.loads((tmp_path / ".claude.json.bak").read_text())
+    backup = json.loads((tmp_path / ".claude.json.bak").read_text(encoding="utf-8"))
     assert backup["numStartups"] == 7
     assert "mcpServers" not in backup
 
@@ -54,24 +55,24 @@ def test_claude_registration_writes_a_backup(tmp_path):
 def test_registration_is_idempotent(tmp_path):
     register_mcp("claude", "/v", home=tmp_path, use_cli=False)
     register_mcp("claude", "/v", home=tmp_path, use_cli=False)
-    servers = json.loads((tmp_path / ".claude.json").read_text())["mcpServers"]
+    servers = json.loads((tmp_path / ".claude.json").read_text(encoding="utf-8"))["mcpServers"]
     assert len(servers) == 1
 
 
 def test_re_registration_updates_the_vault_path(tmp_path):
     register_mcp("claude", "/old", home=tmp_path, use_cli=False)
     register_mcp("claude", "/new", home=tmp_path, use_cli=False)
-    servers = json.loads((tmp_path / ".claude.json").read_text())["mcpServers"]
+    servers = json.loads((tmp_path / ".claude.json").read_text(encoding="utf-8"))["mcpServers"]
     assert "/new" in servers["beyondmeetings-vault"]["args"]
     assert "/old" not in servers["beyondmeetings-vault"]["args"]
 
 
 def test_corrupt_existing_config_is_refused_not_overwritten(tmp_path):
     target = tmp_path / ".claude.json"
-    target.write_text("{ this is not json")
+    target.write_text("{ this is not json", encoding="utf-8")
     with pytest.raises(ValueError, match="could not be parsed"):
         register_mcp("claude", "/v", home=tmp_path, use_cli=False)
-    assert target.read_text() == "{ this is not json"
+    assert target.read_text(encoding="utf-8") == "{ this is not json"
 
 
 def test_no_temp_file_is_left_behind(tmp_path):
@@ -81,13 +82,13 @@ def test_no_temp_file_is_left_behind(tmp_path):
 
 def test_gemini_registration_uses_its_settings_file(tmp_path):
     register_mcp("gemini", "/v", home=tmp_path)
-    data = json.loads((tmp_path / ".gemini" / "settings.json").read_text())
+    data = json.loads((tmp_path / ".gemini" / "settings.json").read_text(encoding="utf-8"))
     assert "beyondmeetings-vault" in data["mcpServers"]
 
 
 def test_codex_registration_uses_toml(tmp_path):
     register_mcp("codex", "/v", home=tmp_path)
-    text = (tmp_path / ".codex" / "config.toml").read_text()
+    text = (tmp_path / ".codex" / "config.toml").read_text(encoding="utf-8")
     assert "mcp_servers.beyondmeetings-vault" in text
     assert "/v" in text
 
@@ -95,15 +96,15 @@ def test_codex_registration_uses_toml(tmp_path):
 def test_codex_registration_preserves_existing_toml(tmp_path):
     config = tmp_path / ".codex" / "config.toml"
     config.parent.mkdir()
-    config.write_text('model = "o3"\n')
+    config.write_text('model = "o3"\n', encoding="utf-8")
     register_mcp("codex", "/v", home=tmp_path)
-    assert 'model = "o3"' in config.read_text()
+    assert 'model = "o3"' in config.read_text(encoding="utf-8")
 
 
 def test_codex_re_registration_does_not_stack_blocks(tmp_path):
     register_mcp("codex", "/v", home=tmp_path)
     register_mcp("codex", "/v", home=tmp_path)
-    text = (tmp_path / ".codex" / "config.toml").read_text()
+    text = (tmp_path / ".codex" / "config.toml").read_text(encoding="utf-8")
     assert text.count("mcp_servers.beyondmeetings-vault") == 1
 
 
@@ -120,38 +121,44 @@ def test_every_declared_agent_has_a_writer():
 
 # --- Review finding #6: permissions, symlinks, fsync, backup ---
 
+@pytest.mark.skipif(
+    sys.platform == "win32", reason="POSIX file modes do not exist on Windows"
+)
 def test_permissions_are_preserved_not_downgraded(tmp_path):
     """A 0600 config used to come back 0644 after registration."""
     import os
     import stat
 
     target = tmp_path / ".claude.json"
-    target.write_text('{"numStartups": 1}')
+    target.write_text('{"numStartups": 1}', encoding="utf-8")
     os.chmod(target, 0o600)
     register_mcp("claude", "/v", home=tmp_path, use_cli=False)
     assert stat.S_IMODE(target.stat().st_mode) == 0o600
 
 
+@pytest.mark.skipif(
+    sys.platform == "win32", reason="creating a symlink on Windows needs elevation or developer mode"
+)
 def test_a_symlinked_config_is_followed_not_replaced(tmp_path):
     """A dotfiles-managed config must keep its symlink."""
     real = tmp_path / "dotfiles" / "claude.json"
     real.parent.mkdir()
-    real.write_text('{"numStartups": 3}')
+    real.write_text('{"numStartups": 3}', encoding="utf-8")
     link = tmp_path / ".claude.json"
     link.symlink_to(real)
 
     register_mcp("claude", "/v", home=tmp_path, use_cli=False)
 
     assert link.is_symlink(), "the symlink was replaced with a regular file"
-    assert "beyondmeetings-vault" in json.loads(real.read_text())["mcpServers"]
+    assert "beyondmeetings-vault" in json.loads(real.read_text(encoding="utf-8"))["mcpServers"]
 
 
 def test_the_pristine_backup_is_not_overwritten_by_a_second_run(tmp_path):
     target = tmp_path / ".claude.json"
-    target.write_text('{"numStartups": 9}')
+    target.write_text('{"numStartups": 9}', encoding="utf-8")
     register_mcp("claude", "/v", home=tmp_path, use_cli=False)
     register_mcp("claude", "/w", home=tmp_path, use_cli=False)
-    backup = json.loads((tmp_path / ".claude.json.bak").read_text())
+    backup = json.loads((tmp_path / ".claude.json.bak").read_text(encoding="utf-8"))
     assert "mcpServers" not in backup, "backup should still be the original"
     assert backup["numStartups"] == 9
 
@@ -185,5 +192,5 @@ def test_falls_back_to_the_file_when_the_cli_fails(monkeypatch, tmp_path):
     monkeypatch.setattr("subprocess.run", lambda *a, **k: Result())
     register_mcp("claude", "/v", home=tmp_path)
     assert "beyondmeetings-vault" in json.loads(
-        (tmp_path / ".claude.json").read_text()
+        (tmp_path / ".claude.json").read_text(encoding="utf-8")
     )["mcpServers"]

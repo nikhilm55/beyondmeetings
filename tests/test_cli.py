@@ -101,7 +101,7 @@ def test_notes_accepts_a_recording_not_just_a_transcript(monkeypatch, tmp_path,
 
     wav = tmp_path / "seg000.wav"
     wav.write_bytes(b"RIFF")
-    transcript_path(wav).write_text("cached from the interrupted run")
+    transcript_path(wav).write_text("cached from the interrupted run", encoding="utf-8")
 
     seen = {}
     monkeypatch.setattr(cli, "load_config", lambda: Config(data_dir=str(tmp_path)))

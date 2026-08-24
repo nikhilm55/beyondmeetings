@@ -73,5 +73,5 @@ def test_wheel_builds_and_contains_every_web_asset(tmp_path):
 
 
 def test_entry_point_is_declared():
-    text = (ROOT / "pyproject.toml").read_text()
+    text = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
     assert 'beyondmeetings = "beyondmeetings.cli:main"' in text

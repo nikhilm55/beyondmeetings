@@ -35,7 +35,7 @@ def test_clear_is_safe_when_already_absent(tmp_path):
 
 def test_load_raises_on_corrupt_file(tmp_path):
     path = tmp_path / "state.json"
-    path.write_text("{not json")
+    path.write_text("{not json", encoding="utf-8")
     with pytest.raises(ValueError):
         load_state(path)
 

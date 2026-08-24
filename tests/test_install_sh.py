@@ -1,6 +1,17 @@
 import shutil
 import subprocess
+import sys
 from pathlib import Path
+
+import pytest
+
+# install.sh is a bash installer and refuses to run on Windows by design;
+# Windows installs through install.ps1. The condition only fires on win32, so
+# Linux collection is unchanged.
+pytestmark = pytest.mark.skipif(
+    sys.platform == "win32",
+    reason="install.sh is a bash installer; Windows uses install.ps1",
+)
 
 SCRIPT = Path(__file__).resolve().parents[1] / "install.sh"
 
@@ -45,7 +56,7 @@ def test_no_uv_with_unusable_python_prints_a_distro_hint(tmp_path):
     fake_bin.mkdir()
     for name in ("python3", "python3.10", "python3.11", "python3.12", "python3.13"):
         stub = fake_bin / name
-        stub.write_text("#!/bin/sh\nexit 1\n")
+        stub.write_text("#!/bin/sh\nexit 1\n", encoding="utf-8")
         stub.chmod(0o755)
     env = {"PATH": f"{fake_bin}:/usr/bin:/bin", "HOME": str(tmp_path)}
     proc = _run(["--no-uv", "--dry-run"], env=env)
@@ -57,7 +68,7 @@ def test_no_uv_with_unusable_python_prints_a_distro_hint(tmp_path):
 
 def test_survives_being_piped_into_bash():
     """The README's one-liner pipes this script in; BASH_SOURCE is then unset."""
-    script = SCRIPT.read_text()
+    script = SCRIPT.read_text(encoding="utf-8")
     proc = subprocess.run(
         ["bash", "-s", "--", "--dry-run"],
         input=script, capture_output=True, text=True,
@@ -68,18 +79,18 @@ def test_survives_being_piped_into_bash():
 
 
 def test_bash_source_is_defaulted():
-    assert "${BASH_SOURCE[0]:-}" in SCRIPT.read_text(), (
+    assert "${BASH_SOURCE[0]:-}" in SCRIPT.read_text(encoding="utf-8"), (
         "an undefaulted BASH_SOURCE[0] aborts under `set -u` when piped"
     )
 
 
 def test_bin_dir_is_overridable():
     """Needed to sandbox-test the installer without clobbering a real install."""
-    assert "BEYONDMEETINGS_BIN" in SCRIPT.read_text()
+    assert "BEYONDMEETINGS_BIN" in SCRIPT.read_text(encoding="utf-8")
 
 
 def test_installs_the_app_icon():
-    assert "install_desktop_entry" in SCRIPT.read_text()
+    assert "install_desktop_entry" in SCRIPT.read_text(encoding="utf-8")
 
 
 # --- `uv venv` creates an environment with no pip in it ---
@@ -91,7 +102,7 @@ def test_uv_venv_is_seeded_with_pip():
     'No module named pip' right after uv had done all its work.
     """
     line = next(
-        l for l in SCRIPT.read_text().splitlines() if l.strip().startswith("uv venv")
+        l for l in SCRIPT.read_text(encoding="utf-8").splitlines() if l.strip().startswith("uv venv")
     )
     assert "--seed" in line, f"`uv venv` needs --seed to get pip: {line.strip()!r}"
 

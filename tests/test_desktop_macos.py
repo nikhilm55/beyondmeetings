@@ -9,6 +9,7 @@ All of this is filesystem work, so it is testable here. What is not testable
 without a Mac is whether macOS then attributes the grant the way we intend.
 """
 import plistlib
+import sys
 
 import pytest
 
@@ -19,6 +20,13 @@ from beyondmeetings.desktop_macos import (
     info_plist,
     install_app_bundle,
     remove_app_bundle,
+)
+
+# The bundle's launcher and helper are asserted to be executable, which has no
+# meaning on Windows. The condition fires only on win32.
+pytestmark = pytest.mark.skipif(
+    sys.platform == "win32",
+    reason="the .app bundle relies on POSIX permissions; macOS-only",
 )
 
 
