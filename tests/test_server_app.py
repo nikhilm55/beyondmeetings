@@ -380,7 +380,7 @@ def test_tasks_are_available_to_the_built_in_app(app_and_session):
         "> [!todo]+ Pending — 1\n"
         "> > **==Ship it==** · `App` · `HIGH`\n"
         "> > Finish it. — **Nikhil** · [[Meetings/2026-07-30/Plan]]\n> >\n",
-    ))
+    ), encoding="utf-8")
     assert client.get("/api/tasks").json()["tasks"][0]["title"] == "Ship it"
 
 

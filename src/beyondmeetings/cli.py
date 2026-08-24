@@ -102,7 +102,17 @@ def _session(config, data_dir: Path) -> SessionManager:
     )
 
 
+def _use_utf8_output() -> None:
+    # Windows consoles and redirects default to a legacy code page (cp1252)
+    # that cannot encode the marks and dashes this CLI prints, so
+    # `beyondmeetings doctor` died mid-line before showing any check.
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, "reconfigure"):
+            stream.reconfigure(encoding="utf-8")
+
+
 def main(argv: list[str] | None = None) -> int:
+    _use_utf8_output()
     args = build_parser().parse_args(argv)
     config = load_config()
     data_dir = Path(config.data_dir)

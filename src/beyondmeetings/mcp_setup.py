@@ -72,11 +72,15 @@ def _write_atomically(path: Path, text: str) -> None:
     os.chmod(temp, mode)
     os.replace(temp, target)
 
-    directory = os.open(target.parent, os.O_RDONLY)
-    try:
-        os.fsync(directory)
-    finally:
-        os.close(directory)
+    # fsync the renamed directory entry so the change survives a crash. There
+    # is no way to open a directory with os.open on Windows, where the rename
+    # is already metadata-journaled, so the durability step is POSIX-only.
+    if os.name == "posix":
+        directory = os.open(target.parent, os.O_RDONLY)
+        try:
+            os.fsync(directory)
+        finally:
+            os.close(directory)
 
 
 def _write_json_config(path: Path, vault_path: str) -> Path:

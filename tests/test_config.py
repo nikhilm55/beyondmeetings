@@ -8,7 +8,9 @@ def test_load_returns_defaults_when_file_absent(tmp_path):
     assert cfg.notes_language == "English"
     assert cfg.projects == []
     assert cfg.segment_minutes == 50
-    assert cfg.notes_path.endswith("beyondmeetings/library")
+    # Windows path separators must not hide that the default library is the
+    # app-owned beyondmeetings/library folder.
+    assert cfg.notes_path.replace("\\", "/").endswith("beyondmeetings/library")
 
 
 def test_old_vault_setting_is_used_as_the_local_library():
