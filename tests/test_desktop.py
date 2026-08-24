@@ -79,11 +79,10 @@ def test_entry_is_a_valid_desktop_file(tmp_path):
     assert "Terminal=false" in text
 
 
-def test_entry_calls_open_not_serve(tmp_path):
-    """`serve` would block and never open a browser; `open` is idempotent."""
+def test_entry_calls_native_app_not_browser_launcher(tmp_path):
     install_desktop_entry(tmp_path)
     text = desktop_entry_path(tmp_path).read_text()
-    assert " open" in text
+    assert " app" in text
     assert "serve" not in text
 
 

@@ -1,4 +1,6 @@
-from beyondmeetings.history import list_meetings
+from datetime import date
+
+from beyondmeetings.history import list_meetings, search_meetings
 
 
 def _note(vault, day, title, summary="A summary.", tag="Acme"):
@@ -23,6 +25,16 @@ def test_lists_a_meeting_with_its_metadata(tmp_path):
     assert row["summary"] == "We synced."
     assert row["project"] == "Acme"
     assert row["link"] == "Meetings/2026-07-30/Standup"
+    assert row["recorded_at"] == ""
+
+
+def test_reads_the_recording_time_when_available(tmp_path):
+    _note(tmp_path, "2026-07-30", "Standup")
+    path = tmp_path / "Meetings" / "2026-07-30" / "Standup.md"
+    path.write_text(path.read_text().replace(
+        "date: 2026-07-30", "date: 2026-07-30\nrecorded_at: 2026-07-30T14:30:00"
+    ))
+    assert list_meetings(tmp_path)[0]["recorded_at"] == "2026-07-30T14:30:00"
 
 
 def test_counts_action_items(tmp_path):
@@ -75,3 +87,24 @@ def test_missing_meetings_directory_is_not_an_error(tmp_path):
 def test_reads_real_titles_with_punctuation(tmp_path):
     _note(tmp_path, "2026-07-30", "Phase 4 - Resourcing & Tooling")
     assert list_meetings(tmp_path)[0]["title"] == "Phase 4 - Resourcing & Tooling"
+
+
+def test_library_search_finds_content_and_returns_clickable_sources(tmp_path):
+    _note(tmp_path, "2026-07-30", "Delivery plan", summary="Mumbai rollout")
+    result = search_meetings(tmp_path, "What did we say about Mumbai?")
+    assert "one relevant meeting" in result["answer"]
+    assert result["sources"][0]["title"] == "Delivery plan"
+    assert result["sources"][0]["link"].startswith("Meetings/")
+
+
+def test_library_search_understands_today(tmp_path):
+    _note(tmp_path, "2026-08-11", "Daily review")
+    result = search_meetings(
+        tmp_path, "show meetings from today", today=date(2026, 8, 11)
+    )
+    assert result["sources"][0]["date"] == "2026-08-11"
+
+
+def test_library_search_does_not_return_unrelated_notes(tmp_path):
+    _note(tmp_path, "2026-07-30", "Budget")
+    assert search_meetings(tmp_path, "quantum banana")["sources"] == []

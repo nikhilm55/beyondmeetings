@@ -127,7 +127,14 @@ if [ "$USING_UV" -eq 1 ]; then
   # with no pip at all, and the install below dies on "No module named pip".
   uv venv --seed --python "${MIN_MAJOR}.${MIN_MINOR}" "$PREFIX/venv"
 else
-  "$INTERPRETER" -m venv "$PREFIX/venv"
+  # Linux desktop bindings (PyGObject/WebKit) are normally supplied by the
+  # distribution rather than pip. Let the isolated app environment see those
+  # read-only system packages; packages installed into the venv still win.
+  if [ "$OS" = "Linux" ]; then
+    "$INTERPRETER" -m venv --system-site-packages "$PREFIX/venv"
+  else
+    "$INTERPRETER" -m venv "$PREFIX/venv"
+  fi
 fi
 
 say "Installing beyondMeetings…"
@@ -143,9 +150,36 @@ if [ -n "$SCRIPT_SRC" ]; then
 fi
 
 if [ -n "$SCRIPT_DIR" ] && [ -f "$SCRIPT_DIR/pyproject.toml" ]; then
-  "$PREFIX/venv/bin/python" -m pip install --quiet "$SCRIPT_DIR"
+  "$PREFIX/venv/bin/python" -m pip install --quiet "$SCRIPT_DIR[desktop]"
 else
-  "$PREFIX/venv/bin/python" -m pip install --quiet "beyondmeetings @ git+$REPO"
+  "$PREFIX/venv/bin/python" -m pip install --quiet "beyondmeetings[desktop] @ git+$REPO"
+fi
+
+# Ubuntu ships the AppIndicator runtime and GNOME extension by default, but
+# the tiny GI typelib that Python needs is a separate package. Install that
+# one file privately when it is missing: this avoids sudo/password prompts and
+# lets the global REC indicator work immediately after a normal user install.
+if [ "$OS" = "Linux" ] && ! "$PREFIX/venv/bin/python" -c "
+from beyondmeetings.tray import _ayatana_available
+raise SystemExit(0 if _ayatana_available() else 1)
+" >/dev/null 2>&1; then
+  if command -v apt-get >/dev/null 2>&1 && command -v dpkg-deb >/dev/null 2>&1; then
+    INDICATOR_TMP="$(mktemp -d)"
+    say "Adding the GNOME top-panel recording indicator…"
+    if (cd "$INDICATOR_TMP" && apt-get download \
+        gir1.2-ayatanaappindicator3-0.1 >/dev/null 2>&1); then
+      INDICATOR_DEB="$(find "$INDICATOR_TMP" -maxdepth 1 -type f -name '*.deb' -print -quit)"
+      if [ -n "$INDICATOR_DEB" ]; then
+        mkdir -p "$PREFIX/indicator"
+        dpkg-deb -x "$INDICATOR_DEB" "$PREFIX/indicator"
+        say "Top-panel indicator enabled"
+      fi
+    else
+      say "Could not download the optional GNOME indicator binding."
+      say "Install gir1.2-ayatanaappindicator3-0.1 later to enable it."
+    fi
+    rm -rf "$INDICATOR_TMP"
+  fi
 fi
 
 ln -sf "$PREFIX/venv/bin/beyondmeetings" "$BIN_DIR/beyondmeetings"
@@ -208,6 +242,10 @@ else
 from beyondmeetings.desktop import install_desktop_entry
 install_desktop_entry()
 " >/dev/null 2>&1 && say "App icon added to your applications"
+  "$PREFIX/venv/bin/python" -c "
+from beyondmeetings.doctor.autostart import refresh_installed_autostart
+refresh_installed_autostart()
+" >/dev/null 2>&1 && say "Login startup updated for the top-panel indicator"
 fi
 
 echo
@@ -220,5 +258,5 @@ sys.exit(0 if server_is_running() else 1)
   exit 0
 fi
 
-say "Opening the setup wizard…"
-exec "$BIN_DIR/beyondmeetings" setup
+say "Opening the desktop app…"
+exec "$BIN_DIR/beyondmeetings" app --setup

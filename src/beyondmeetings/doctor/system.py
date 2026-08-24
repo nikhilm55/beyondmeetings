@@ -28,18 +28,26 @@ class PipeWireCheck(Check):
     required = True
 
     def detect(self) -> CheckResult:
-        missing = [b for b in ("pactl", "pw-record") if not shutil.which(b)]
-        if missing:
+        pactl = shutil.which("pactl")
+        capture = next(
+            (binary for binary in ("parec", "pw-record") if shutil.which(binary)),
+            None,
+        )
+        if not pactl or not capture:
+            missing = []
+            if not pactl:
+                missing.append("pactl")
+            if not capture:
+                missing.append("parec or pw-record")
             return CheckResult(
                 status="missing",
                 detail=(
-                    f"Not found: {', '.join(missing)}. beyondMeetings needs PipeWire "
-                    "for system-wide audio capture. On most desktops it is already "
-                    "running; on servers or PulseAudio-only systems it is not "
-                    "available and recording cannot work."
+                    f"Not found: {', '.join(missing)}. beyondMeetings needs the "
+                    "pactl plus either parec or pw-record for Linux desktop "
+                    "audio capture, including PipeWire."
                 ),
             )
-        return CheckResult(status="ok", detail="pactl and pw-record found")
+        return CheckResult(status="ok", detail=f"pactl and {capture} found")
 
 
 class FfmpegCheck(Check):

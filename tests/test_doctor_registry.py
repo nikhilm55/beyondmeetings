@@ -24,7 +24,7 @@ def test_registry_returns_checks_in_a_stable_order(tmp_path):
         "provider_choice", "transcriber_choice",
         "pipewire", "ffmpeg",
         "groq_key", "provider_key", "whisper_model",
-        "obsidian", "vault", "rules", "mcp", "launcher", "autostart",
+        "storage", "rules", "mcp", "launcher", "autostart",
     ]
 
 
@@ -62,6 +62,15 @@ def test_registry_uses_the_configured_provider(tmp_path):
 def test_registry_ids_are_unique(tmp_path):
     ids = [c.id for c in build_checks(Config(), config_path=tmp_path / "c.toml")]
     assert len(ids) == len(set(ids))
+
+
+def test_windows_uses_wasapi_check_not_linux_desktop_checks(tmp_path):
+    ids = [c.id for c in build_checks(
+        Config(), config_path=tmp_path / "c.toml", platform="win32"
+    )]
+    assert "windows_audio" in ids
+    assert "pipewire" not in ids
+    assert "launcher" not in ids
 
 
 def test_rules_land_in_the_vault_when_one_is_configured(tmp_path):

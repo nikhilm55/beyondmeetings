@@ -15,11 +15,10 @@ from .choices import ProviderChoice, TranscriberChoice
 from .desktop import DesktopLauncherCheck
 from .keys import GroqKeyCheck, ProviderKeyCheck
 from .mcp import McpCheck
-from .obsidian import ObsidianCheck
 from .rules_check import RulesCheck
 from .system import FfmpegCheck, PipeWireCheck
 from .transcriber import WhisperModelCheck
-from .vault import VaultCheck
+from .vault import StorageCheck
 
 
 def build_checks(
@@ -31,6 +30,7 @@ def build_checks(
     config_path = Path(config_path or DEFAULT_CONFIG_PATH)
     platform = platform if platform is not None else sys.platform
     macos = platform == "darwin"
+    windows = platform == "win32"
 
     checks: list[Check] = [
         # Choices first — they change what the rows below mean.
@@ -54,6 +54,10 @@ def build_checks(
             ScreenRecordingPermissionCheck(),
             MicrophonePermissionCheck(),
         ]
+    elif windows:
+        from .windows import WindowsAudioCheck
+
+        checks.append(WindowsAudioCheck())
     else:
         checks.append(PipeWireCheck())
 
@@ -72,15 +76,14 @@ def build_checks(
             agent_command=config.agent_command or None,
         ),
         WhisperModelCheck(config),
-        ObsidianCheck(),
-        VaultCheck(config, config_path=config_path),
+        StorageCheck(config, config_path=config_path),
         RulesCheck(config),
         McpCheck(config),
     ]
 
     # Both are freedesktop-specific: a .desktop entry and an XDG autostart
     # file mean nothing on macOS, where the .app bundle covers the same ground.
-    if not macos:
+    if not macos and not windows:
         checks += [DesktopLauncherCheck(config), AutostartCheck(config)]
 
     return checks

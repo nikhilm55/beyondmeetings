@@ -7,6 +7,7 @@ import pytest
 
 from beyondmeetings.llm.agent_cli import (
     AGENT_COMMANDS, AgentCliError, AgentCliProvider, agent_available, agent_binary,
+    resolve_agent_binary,
 )
 from beyondmeetings.llm.base import ResponseParseError
 
@@ -54,6 +55,15 @@ def test_uses_the_expected_command(monkeypatch):
     assert calls[0][0] == ["claude", "-p"]
 
 
+def test_codex_allows_desktop_runs_outside_a_git_repository(monkeypatch):
+    calls = []
+    _patch(monkeypatch, FakeRun(stdout=NOTE_JSON), calls)
+
+    AgentCliProvider("codex-cli").analyse("p")
+
+    assert calls[0][0] == ["codex", "exec", "--skip-git-repo-check", "-"]
+
+
 def test_command_can_be_overridden(monkeypatch):
     calls = []
     _patch(monkeypatch, FakeRun(stdout=NOTE_JSON), calls)
@@ -74,8 +84,56 @@ def test_no_api_key_is_ever_required(monkeypatch):
 
 def test_missing_binary_is_reported_actionably(monkeypatch):
     monkeypatch.setattr("shutil.which", lambda n: None)
-    with pytest.raises(AgentCliError, match="not on your PATH"):
+    monkeypatch.setattr(
+        "beyondmeetings.llm.agent_cli._fallback_agent_binaries", lambda n: []
+    )
+    with pytest.raises(AgentCliError, match="not installed or discoverable"):
         AgentCliProvider("claude-cli").analyse("p")
+
+
+def test_finds_a_user_binary_outside_the_desktop_path(tmp_path, monkeypatch):
+    binary = tmp_path / ".local" / "bin" / "codex"
+    binary.parent.mkdir(parents=True)
+    binary.write_text("#!/bin/sh\n")
+    binary.chmod(0o755)
+    monkeypatch.setattr("pathlib.Path.home", lambda: tmp_path)
+    monkeypatch.setattr("shutil.which", lambda n: None)
+
+    assert resolve_agent_binary("codex") == str(binary)
+
+
+def test_finds_codex_bundled_with_the_openai_editor_extension(tmp_path, monkeypatch):
+    binary = (
+        tmp_path / ".vscode" / "extensions" / "openai.chatgpt-1.2.3-linux-x64"
+        / "bin" / "linux-x86_64" / "codex"
+    )
+    binary.parent.mkdir(parents=True)
+    binary.write_text("#!/bin/sh\n")
+    binary.chmod(0o755)
+    monkeypatch.setattr("pathlib.Path.home", lambda: tmp_path)
+    monkeypatch.setattr("shutil.which", lambda n: None)
+
+    assert resolve_agent_binary("codex") == str(binary)
+
+
+def test_runs_the_discovered_absolute_binary(tmp_path, monkeypatch):
+    binary = tmp_path / ".local" / "bin" / "codex"
+    binary.parent.mkdir(parents=True)
+    binary.write_text("#!/bin/sh\n")
+    binary.chmod(0o755)
+    calls = []
+    monkeypatch.setattr("pathlib.Path.home", lambda: tmp_path)
+    monkeypatch.setattr("shutil.which", lambda n: None)
+    monkeypatch.setattr(
+        "subprocess.run",
+        lambda cmd, **kwargs: calls.append((cmd, kwargs)) or FakeRun(stdout=NOTE_JSON),
+    )
+
+    AgentCliProvider("codex-cli").analyse("prompt")
+
+    assert calls[0][0] == [
+        str(binary), "exec", "--skip-git-repo-check", "-",
+    ]
 
 
 def test_a_nonzero_exit_mentions_signing_in(monkeypatch):

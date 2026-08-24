@@ -25,6 +25,11 @@ def test_frontmatter_lists_tags_and_attendees_as_yaml_blocks():
     assert "date: 2026-07-30\n" in out
 
 
+def test_recording_time_is_preserved_when_supplied():
+    out = render_note(_note(), recorded_at="2026-07-30T14:30:00")
+    assert 'recorded_at: "2026-07-30T14:30:00"' in out
+
+
 def test_h1_uses_the_display_title_with_em_dash():
     assert "\n# Phase 4 — Plan\n" in render_note(_note())
 

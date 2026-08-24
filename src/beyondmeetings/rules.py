@@ -17,7 +17,7 @@ TEMPLATE = """# beyondMeetings — Agent Instructions
 <!-- CLAUDE.md, AGENTS.md and GEMINI.md are identical copies of one template. -->
 
 beyondMeetings records meetings, transcribes them, and writes structured notes
-into an Obsidian vault. **All behaviour lives in the `beyondmeetings` command.**
+into its local Markdown library. **All behaviour lives in the `beyondmeetings` command.**
 Your job is to run it at the right moment — never to reimplement it.
 
 ## When the user says "start recording"
@@ -60,9 +60,9 @@ beyondmeetings notes /path/to/transcript.txt
 beyondmeetings doctor
 ```
 
-## Vault conventions
+## Library conventions
 
-The vault is at `{vault_path}`.
+The local notes library is at `{vault_path}`.
 
 | What | Where |
 |---|---|

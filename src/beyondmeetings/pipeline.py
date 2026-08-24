@@ -1,4 +1,4 @@
-"""Transcript in, vault updated.
+"""Transcript in, local notes library updated.
 
 Every write is deterministic. The provider's only influence is the content of
 the MeetingNote it returns.
@@ -19,6 +19,7 @@ from .prompts import build_analysis_prompt
 from .vault import followup, home, taskboard
 from .vault import note as note_render
 from .vault.paths import note_path
+from .vault.scaffold import scaffold_vault
 
 log = logging.getLogger(__name__)
 
@@ -28,8 +29,13 @@ def generate_notes(
     config: Config,
     provider: LLMProvider,
     meeting_date: str | None = None,
+    recorded_at: str | None = None,
+    transcript_ref: str | None = None,
 ) -> Path:
-    vault = Path(config.vault_path)
+    vault = Path(config.notes_path)
+    # The app owns its default library, so first-run note generation cannot be
+    # blocked by a setup step. Existing files are never overwritten.
+    scaffold_vault(vault)
     meeting_date = meeting_date or date.today().isoformat()
 
     candidates = followup.gather_candidates(vault)
@@ -67,6 +73,8 @@ def generate_notes(
             result,
             transcriber=transcriber_label(config.transcriber),
             provider=provider_label(config.provider),
+            recorded_at=recorded_at,
+            transcript_ref=transcript_ref,
         ),
         encoding="utf-8",
     )

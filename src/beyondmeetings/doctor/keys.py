@@ -7,7 +7,6 @@ regex cannot catch a revoked or wrong-account key.
 from __future__ import annotations
 
 import re
-import shutil
 from pathlib import Path
 
 import httpx
@@ -127,13 +126,18 @@ def validate_agent_cli(provider: str, command: list[str] | None = None) -> tuple
     Verified with a one-token round trip rather than `--version`, because an
     installed-but-unauthenticated CLI is the failure that actually happens.
     """
-    from ..llm.agent_cli import AgentCliError, AgentCliProvider, agent_binary
+    from ..llm.agent_cli import (
+        AgentCliError,
+        AgentCliProvider,
+        agent_binary,
+        resolve_agent_binary,
+    )
 
     binary = (command or [agent_binary(provider)])[0]
-    if not shutil.which(binary):
+    if not resolve_agent_binary(binary):
         return False, (
-            f"{binary} is not installed. Install it, or pick a provider that "
-            "uses an API key."
+            f"{binary} is not installed or discoverable by the desktop app. "
+            "Install it, or pick a provider that uses an API key."
         )
 
     probe = AgentCliProvider(provider, command=command)

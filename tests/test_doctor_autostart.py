@@ -1,5 +1,5 @@
 from beyondmeetings.config import Config
-from beyondmeetings.doctor.autostart import AutostartCheck
+from beyondmeetings.doctor.autostart import AutostartCheck, refresh_installed_autostart
 
 
 def test_missing_when_no_desktop_entry(tmp_path):
@@ -29,6 +29,12 @@ def test_entry_does_not_open_a_browser_at_login(tmp_path):
     assert "--no-browser" in text
 
 
+def test_entry_keeps_the_global_recording_indicator_enabled(tmp_path):
+    AutostartCheck(Config(), home=tmp_path).fix()
+    text = (tmp_path / ".config" / "autostart" / "beyondmeetings.desktop").read_text()
+    assert "--no-tray" not in text
+
+
 def test_ok_once_written(tmp_path):
     check = AutostartCheck(Config(), home=tmp_path)
     check.fix()
@@ -45,3 +51,9 @@ def test_fix_is_idempotent(tmp_path):
     check.fix()
     entries = list((tmp_path / ".config" / "autostart").glob("*.desktop"))
     assert len(entries) == 1
+
+
+def test_refresh_only_changes_an_entry_the_user_already_enabled(tmp_path):
+    assert refresh_installed_autostart(tmp_path) is False
+    AutostartCheck(Config(), home=tmp_path).fix()
+    assert refresh_installed_autostart(tmp_path) is True

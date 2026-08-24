@@ -199,7 +199,12 @@ class SessionManager:
             ticker.join(timeout=TICKER_JOIN_TIMEOUT)
 
         self._set_phase("stopping")
-        state = self.recorder.stop()
+        try:
+            state = self.recorder.stop()
+        except Exception as exc:
+            log.exception("recording finalization failed")
+            self._fail(f"Recording failed: {exc}")
+            return self.status()
 
         try:
             transcript = self._transcribe(state)
@@ -212,7 +217,14 @@ class SessionManager:
         try:
             self._set_phase("analysing", "Writing notes")
             provider = self.provider_factory(self.config)
-            path = generate_notes(transcript, self.config, provider, state.date)
+            path = generate_notes(
+                transcript,
+                self.config,
+                provider,
+                state.date,
+                recorded_at=state.started_at,
+                transcript_ref=f"{state.date}/{state.filename_base}.txt",
+            )
         except Exception as exc:
             log.exception("note generation failed")
             self._fail(

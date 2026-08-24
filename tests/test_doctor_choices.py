@@ -119,9 +119,9 @@ def test_mcp_is_not_required(tmp_path):
     assert McpCheck(Config(), home=tmp_path, use_cli=False).required is False
 
 
-def test_mcp_fix_without_a_vault_is_refused(monkeypatch, tmp_path):
+def test_mcp_uses_the_app_owned_library_without_manual_selection(monkeypatch, tmp_path):
     monkeypatch.setattr("beyondmeetings.doctor.mcp.detect_agents", lambda: ["claude"])
-    assert McpCheck(Config(), home=tmp_path, use_cli=False).fix().status == "broken"
+    assert McpCheck(Config(), home=tmp_path, use_cli=False).fix().status == "ok"
 
 
 def test_mcp_survives_a_corrupt_agent_config(monkeypatch, tmp_path):

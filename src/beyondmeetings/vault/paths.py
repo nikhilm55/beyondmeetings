@@ -1,6 +1,6 @@
 """Filename sanitising and wikilink construction.
 
-Obsidian note filenames drop the date prefix — the date is the folder — and
+Meeting note filenames drop the date prefix — the date is the folder — and
 links are always full-path: [[Meetings/YYYY-MM-DD/Title]].
 """
 from __future__ import annotations

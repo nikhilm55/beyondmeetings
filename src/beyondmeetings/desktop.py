@@ -30,12 +30,12 @@ DESKTOP_ENTRY = """[Desktop Entry]
 Type=Application
 Name=beyondMeetings
 GenericName=Meeting Recorder
-Comment=Record a meeting and get structured notes in Obsidian
-Exec={exec_path} open
+Comment=Record meetings and keep structured notes locally
+Exec={exec_path} app
 Icon={app_id}
 Terminal=false
 Categories=Office;
-Keywords=meeting;recording;transcription;notes;obsidian;
+Keywords=meeting;recording;transcription;notes;tasks;
 StartupNotify=true
 StartupWMClass=beyondmeetings
 """

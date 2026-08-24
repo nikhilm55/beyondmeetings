@@ -9,8 +9,8 @@ from .base import Check, CheckResult
 ENTRY = """[Desktop Entry]
 Type=Application
 Name=beyondMeetings (background)
-Comment=Keeps beyondMeetings ready so the app icon opens instantly
-Exec=beyondmeetings serve --no-browser --no-tray
+Comment=Keeps beyondMeetings ready and shows recording status in the top panel
+Exec=beyondmeetings serve --no-browser
 Terminal=false
 X-GNOME-Autostart-enabled=true
 """
@@ -43,3 +43,12 @@ class AutostartCheck(Check):
         self._entry_path.parent.mkdir(parents=True, exist_ok=True)
         self._entry_path.write_text(ENTRY, encoding="utf-8")
         return self.detect()
+
+
+def refresh_installed_autostart(home: Path | None = None) -> bool:
+    """Upgrade an existing opt-in entry without enabling autostart for others."""
+    check = AutostartCheck(Config(), home=home)
+    if not check._entry_path.is_file():
+        return False
+    check.fix()
+    return True

@@ -20,16 +20,16 @@ class RulesCheck(Check):
 
     @property
     def target_dir(self) -> Path | None:
-        """Only ever the vault. Writing these anywhere else is pointless —
+        """Only ever the note library. Writing these elsewhere is pointless —
         an agent looks in the directory it is run from."""
         if self._target_dir is not None:
             return self._target_dir
-        return Path(self.config.vault_path) if self.config.vault_path else None
+        return Path(self.config.notes_path)
 
     def detect(self) -> CheckResult:
         if self.target_dir is None:
             return CheckResult(
-                status="missing", detail="Choose a vault first — these belong in it."
+                status="missing", detail="Initialize the local library first."
             )
         missing = [n for n in FILENAMES if not (self.target_dir / n).is_file()]
         if missing:
@@ -45,7 +45,7 @@ class RulesCheck(Check):
     def fix(self, **kwargs) -> CheckResult:
         if self.target_dir is None:
             return CheckResult(
-                status="broken", detail="Choose a vault first, then write these."
+                status="broken", detail="Initialize the local library first."
             )
-        write_rules(self.target_dir, self.config.vault_path)
+        write_rules(self.target_dir, self.config.notes_path)
         return self.detect()

@@ -88,6 +88,8 @@ def test_setup_page_is_served(client):
     response = client.get("/setup")
     assert response.status_code == 200
     assert "beyondMeetings" in response.text
+    assert 'id="openApp"' in response.text
+    assert 'id="openFolder"' in response.text
 
 
 def test_static_assets_are_served(client):

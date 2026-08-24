@@ -1,7 +1,7 @@
-"""Register an Obsidian MCP server into whichever agent CLI is installed.
+"""Register the local notes library into whichever agent CLI is installed.
 
-The server is `@modelcontextprotocol/server-filesystem` scoped to the vault:
-no Obsidian plugin, no second API key. The popular mcp-obsidian alternative
+The server is `@modelcontextprotocol/server-filesystem` scoped to the library:
+no notes-app plugin and no second API key. A notes-app-specific alternative
 needs the Local REST API plugin installed and its key copied out, which is
 three more ways for setup to fail.
 

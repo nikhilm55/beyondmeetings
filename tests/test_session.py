@@ -145,6 +145,14 @@ def test_stop_writes_the_note_and_reaches_done(manager, tmp_path):
     assert (tmp_path / "vault" / "Meetings" / "2026-07-30" / "Test Meeting.md").is_file()
 
 
+def test_stop_preserves_when_the_meeting_was_recorded(manager, tmp_path):
+    manager.start("Test Meeting")
+    manager.run_stop()
+    note = tmp_path / "vault" / "Meetings" / "2026-07-30" / "Test Meeting.md"
+    assert 'recorded_at: "2026-07-30T10:00:00"' in note.read_text()
+    assert "transcript: 2026-07-30/2026-07-30_10-00_test1.txt" in note.read_text()
+
+
 def test_stop_writes_the_transcript_to_the_data_dir(manager, tmp_path):
     manager.start("Test Meeting")
     manager.run_stop()
@@ -176,6 +184,18 @@ def test_a_failing_provider_surfaces_the_error_not_a_crash(failing):
     status = failing.status()
     assert status["phase"] == "failed"
     assert "api down" in status["error"]
+
+
+def test_a_recorder_stop_failure_surfaces_the_error_not_a_crash(manager):
+    manager.start("Test")
+
+    def fail_to_stop():
+        raise RuntimeError("capture produced no usable WAV")
+
+    manager.recorder.stop = fail_to_stop
+    status = manager.run_stop()
+    assert status["phase"] == "failed"
+    assert "capture produced no usable WAV" in status["error"]
 
 
 def test_the_transcript_survives_a_provider_failure(failing, tmp_path):

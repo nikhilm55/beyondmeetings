@@ -129,6 +129,17 @@ def test_footer_uses_human_readable_tool_names(tmp_path):
     assert "claude-cli" not in text
 
 
+def test_note_can_record_its_relative_transcript_reference(tmp_path):
+    cfg, provider = _setup(tmp_path, _note())
+    path = generate_notes(
+        "transcript text",
+        cfg,
+        provider,
+        transcript_ref="2026-07-30/recording.txt",
+    )
+    assert "transcript: 2026-07-30/recording.txt" in path.read_text()
+
+
 def test_task_board_keeps_done_section_after_first_insert(tmp_path):
     cfg, provider = _setup(tmp_path, _note())
     generate_notes("transcript text", cfg, provider)

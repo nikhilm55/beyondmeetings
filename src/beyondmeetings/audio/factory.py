@@ -32,7 +32,12 @@ def build_recorder(
 
         return MacRecorder(data_dir, segment_minutes=segment_minutes)
 
+    if platform == "win32":
+        from .windows import WindowsRecorder
+
+        return WindowsRecorder(data_dir, segment_minutes=segment_minutes)
+
     raise UnsupportedPlatformError(
         f"beyondMeetings has no capture backend for {platform}. Recording "
-        "currently requires Linux with PipeWire."
+        "currently supports Linux, Windows and macOS."
     )

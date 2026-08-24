@@ -1,4 +1,4 @@
-"""Obsidian MCP registration into installed agent CLIs."""
+"""Local-library MCP registration into installed agent CLIs."""
 from __future__ import annotations
 
 import json
@@ -11,7 +11,7 @@ from .base import Check, CheckResult
 
 class McpCheck(Check):
     id = "mcp"
-    label = "Vault access for your AI agent"
+    label = "Library access for your AI agent"
     description = (
         "Lets Claude Code, Codex or Gemini CLI read and search your meeting notes."
     )
@@ -59,17 +59,13 @@ class McpCheck(Check):
         return bool(detect_agents())
 
     def fix(self, **kwargs) -> CheckResult:
-        if not self.config.vault_path:
-            return CheckResult(
-                status="broken", detail="Choose a vault first, then register."
-            )
         from ..mcp_setup import register_mcp
 
         failures = []
         for agent in detect_agents():
             try:
                 register_mcp(
-                    agent, self.config.vault_path, home=self.home,
+                    agent, self.config.notes_path, home=self.home,
                     use_cli=self.use_cli,
                 )
             except Exception as exc:

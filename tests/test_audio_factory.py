@@ -30,6 +30,12 @@ def test_macos_gets_the_mac_backend(tmp_path):
     assert isinstance(build_recorder(tmp_path, platform="darwin"), MacRecorder)
 
 
+def test_windows_selects_wasapi_recorder(tmp_path):
+    from beyondmeetings.audio.windows import WindowsRecorder
+
+    assert isinstance(build_recorder(tmp_path, platform="win32"), WindowsRecorder)
+
+
 def test_an_unknown_platform_is_rejected_rather_than_guessed(tmp_path):
-    with pytest.raises(UnsupportedPlatformError, match="win32"):
-        build_recorder(tmp_path, platform="win32")
+    with pytest.raises(UnsupportedPlatformError, match="plan9"):
+        build_recorder(tmp_path, platform="plan9")

@@ -82,7 +82,7 @@ def test_the_launcher_invokes_the_installed_command(tmp_path):
     launcher = (bundle / "Contents" / "MacOS" / "beyondMeetings").read_text()
 
     assert "beyondmeetings" in launcher
-    assert " open" in launcher
+    assert " app" in launcher
 
 
 def test_the_capture_helper_is_copied_into_the_bundle(tmp_path):

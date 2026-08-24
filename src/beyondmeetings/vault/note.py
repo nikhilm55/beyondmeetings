@@ -1,4 +1,4 @@
-"""Render a MeetingNote to Obsidian markdown.
+"""Render a MeetingNote to portable Markdown.
 
 Format mirrors the notes already in the live vault: YAML block sequences in
 frontmatter, an em-dash display title in the H1, typed sections under fixed
@@ -14,7 +14,7 @@ def _yaml_scalar(value: str) -> str:
     """Quote anything that could inject YAML keys into the frontmatter.
 
     Model-supplied tags and dates land here; a tag of `Zenith: real` or a value
-    containing a newline used to add arbitrary keys and break Obsidian's
+    containing a newline used to add arbitrary keys and break the note's
     frontmatter parsing.
     """
     text = " ".join(str(value).split())
@@ -42,10 +42,16 @@ def render_note(
     note: MeetingNote,
     transcriber: str = "Groq Whisper",
     provider: str = "Claude",
+    recorded_at: str | None = None,
+    transcript_ref: str | None = None,
 ) -> str:
     parts: list[str] = ["---\n"]
     parts.append(_yaml_list("tags", note.tags))
     parts.append(f"date: {_yaml_scalar(note.date)}\n")
+    if recorded_at:
+        parts.append(f"recorded_at: {_yaml_scalar(recorded_at)}\n")
+    if transcript_ref:
+        parts.append(f"transcript: {_yaml_scalar(transcript_ref)}\n")
     parts.append(_yaml_list("attendees", note.attendees))
 
     prev_link = None

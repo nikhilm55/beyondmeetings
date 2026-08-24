@@ -1,53 +1,46 @@
-"""Vault path selection and scaffolding."""
+"""App-owned local notes library setup and legacy-vault migration."""
 from __future__ import annotations
 
 from pathlib import Path
 
 from ..config import Config, save_config
 from ..vault.scaffold import scaffold_vault
-from .base import Check, CheckResult, InputField
+from .base import Check, CheckResult
 
 
-class VaultCheck(Check):
-    id = "vault"
-    label = "Obsidian vault"
-    description = "Creates Meetings/, Tasks/Task Board.md and Home.md."
+class StorageCheck(Check):
+    id = "storage"
+    label = "Local notes library"
+    description = "Stores meetings, tasks and the dashboard on this computer."
     required = True
-    inputs = [
-        InputField(name="vault_path", label="Vault folder",
-                   placeholder="/home/you/Documents/Obsidian Vault")
-    ]
+    inputs = []
 
     def __init__(self, config: Config, config_path: Path | None = None):
         self.config = config
         self.config_path = config_path
 
     def detect(self) -> CheckResult:
-        if not self.config.vault_path:
-            return CheckResult(status="missing", detail="No vault chosen yet.")
-        vault = Path(self.config.vault_path)
+        vault = Path(self.config.notes_path)
         if not vault.is_dir():
-            return CheckResult(status="broken", detail=f"{vault} does not exist.")
+            return CheckResult(status="missing", detail=f"Create local library at {vault}.")
         if not (vault / "Home.md").is_file():
-            return CheckResult(status="missing", detail="Vault not scaffolded yet.")
+            return CheckResult(status="missing", detail="Local library needs initialization.")
         return CheckResult(status="ok", detail=str(vault))
 
     @property
     def fixable(self) -> bool:
         return True
 
-    def fix(self, vault_path: str = "", **kwargs) -> CheckResult:
-        if not vault_path and not self.config.vault_path:
-            return CheckResult(status="missing", detail="No vault path provided.")
-
-        target = Path(vault_path or self.config.vault_path).expanduser()
-        if not target.is_dir():
-            return CheckResult(
-                status="broken",
-                detail=f"{target} does not exist. Create it first, then retry.",
-            )
-
+    def fix(self, library_path: str = "", vault_path: str = "", **kwargs) -> CheckResult:
+        target = Path(library_path or vault_path or self.config.notes_path).expanduser()
+        target.mkdir(parents=True, exist_ok=True)
         scaffold_vault(target)
-        self.config.vault_path = str(target)
+        self.config.library_path = str(target)
+        # Once migrated, Obsidian has no role in choosing or owning the data.
+        self.config.vault_path = ""
         save_config(self.config, self.config_path)
         return self.detect()
+
+
+# Import compatibility for integrations built against the old module name.
+VaultCheck = StorageCheck

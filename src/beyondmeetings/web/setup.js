@@ -185,6 +185,24 @@ $("fixall").onclick = async () => {
   }
 };
 
+$("openApp").onclick = () => {
+  window.location.assign("/");
+};
+
+$("openFolder").onclick = async () => {
+  const btn = $("openFolder");
+  btn.disabled = true;
+  btn.textContent = "Opening…";
+  try {
+    await api("/api/library/open", {});
+  } catch (err) {
+    window.alert(`Could not open the notes folder: ${err.message}`);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "Open notes folder";
+  }
+};
+
 api("/api/status")
   .then(render)
   .catch((err) => {

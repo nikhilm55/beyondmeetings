@@ -8,37 +8,206 @@
 </head>
 <body>
   <main>
-    <header class="bar">
-      <strong>beyondMeetings</strong>
-      <a href="/setup" class="quiet">Settings</a>
+    <header class="appHeader">
+      <a class="brand" href="/" aria-label="beyondMeetings home">
+        <span class="brandMark" aria-hidden="true">bM</span>
+        <span>beyondMeetings</span>
+      </a>
+      <div class="headerActions">
+        <div id="recordingBadge" class="recordingBadge" aria-live="polite">
+          <span class="statusDot" aria-hidden="true"></span>
+          <span id="recordingBadgeText">Not recording</span>
+        </div>
+        <button id="openFolder" class="headerButton" type="button" title="Open notes folder">
+          <span aria-hidden="true">↗</span> Notes folder
+        </button>
+        <a href="/setup" class="headerButton">Settings</a>
+      </div>
     </header>
 
-    <section class="control">
-      <button id="record" class="record">Start</button>
-      <div class="controlText">
-        <div class="state" id="state">Ready to record</div>
-        <div class="timer" id="timer" hidden>00:00</div>
-        <div class="detail" id="detail"></div>
-        <input id="name" class="nameInput" placeholder="Meeting name (optional)">
+    <section id="recorderCard" class="recorderCard" aria-labelledby="state">
+      <div class="recorderStatus">
+        <div id="liveIndicator" class="liveIndicator" aria-hidden="true">
+          <span></span><span></span><span></span>
+        </div>
+        <div class="controlText">
+          <div class="eyebrow" id="statusEyebrow">Meeting recorder</div>
+          <h1 class="state" id="state">Ready to record</h1>
+          <div class="detail" id="detail">Name the meeting, then start when everyone is ready.</div>
+          <input id="name" class="nameInput" maxlength="120"
+                 placeholder="Meeting name (optional)" aria-label="Meeting name">
+        </div>
+      </div>
+      <div class="recorderAction">
+        <div class="timerWrap" id="timerWrap" hidden>
+          <span class="timerLabel">Elapsed</span>
+          <span class="timer" id="timer">00:00</span>
+        </div>
+        <button id="record" class="record" type="button">
+          <span class="recordIcon" aria-hidden="true"></span>
+          <span id="recordLabel">Start recording</span>
+        </button>
       </div>
     </section>
 
-    <section class="alert" id="alert" hidden>
+    <section class="alert" id="alert" hidden role="alert">
+      <div class="alertIcon" aria-hidden="true">!</div>
       <div class="alertText" id="alertText"></div>
       <button id="retry" class="btn" hidden>Regenerate notes</button>
-      <button id="reset" class="btn" hidden>Clear recording state</button>
+      <button id="reset" class="btn" hidden>Dismiss</button>
     </section>
 
-    <section>
-      <div class="listHead">
-        <h2>Meetings</h2>
-        <input id="search" class="search" placeholder="Search…"
-               aria-label="Search meetings">
+    <section class="workspace">
+      <div class="workspaceHeading">
+        <div>
+          <p class="eyebrow">Your local library</p>
+          <h2>Meeting knowledge</h2>
+        </div>
+        <div class="libraryStats" aria-label="Meeting library summary">
+          <span><strong id="meetingCount">0</strong><span id="meetingNoun"> meetings</span></span>
+          <span id="lastMeeting">No meetings yet</span>
+        </div>
       </div>
-      <div id="list" class="list"></div>
-      <p class="empty" id="empty" hidden>No meetings yet.</p>
+
+      <nav class="tabs" aria-label="Library sections">
+        <button class="tab active" id="meetingsTab" type="button">
+          <span aria-hidden="true">▤</span> Meetings
+        </button>
+        <button class="tab" id="tasksTab" type="button">
+          <span aria-hidden="true">✓</span> Tasks
+        </button>
+        <button class="tab" id="chatTab" type="button">
+          <span aria-hidden="true">✦</span> Ask your notes
+        </button>
+      </nav>
+
+      <section id="meetingsPanel" class="panel">
+        <div class="panelToolbar">
+          <label class="searchBox">
+            <span aria-hidden="true">⌕</span>
+            <input id="search" placeholder="Search meetings, projects or summaries"
+                   aria-label="Search meetings">
+          </label>
+          <button id="clearSearch" class="textButton" type="button" hidden>Clear</button>
+        </div>
+        <div id="list" class="meetingTimeline"></div>
+        <div class="emptyState" id="empty" hidden>
+          <span class="emptyIcon" aria-hidden="true">▤</span>
+          <strong>No meetings yet</strong>
+          <p>Your completed meeting notes will appear here, grouped by date.</p>
+        </div>
+      </section>
+
+      <section id="tasksPanel" class="panel" hidden>
+        <div class="panelTitle">
+          <div><p class="eyebrow">Follow-through</p><h3>Open tasks</h3></div>
+          <span class="countBadge" id="taskCount">0</span>
+        </div>
+        <div id="taskList" class="taskGrid"></div>
+        <div class="emptyState" id="taskEmpty" hidden>
+          <span class="emptyIcon" aria-hidden="true">✓</span>
+          <strong>No open tasks</strong>
+          <p>Action items detected in meetings will be collected here.</p>
+        </div>
+      </section>
+
+      <section id="chatPanel" class="panel chatPanel" hidden>
+        <div class="chatIntro">
+          <div class="assistantAvatar" aria-hidden="true">✦</div>
+          <div>
+            <p class="eyebrow">Local library assistant</p>
+            <h3>Find anything from past meetings</h3>
+            <p>Search by topic, person, project or date. Answers link back to your saved Markdown notes.</p>
+          </div>
+          <span class="privateBadge">Stays on this device</span>
+        </div>
+        <div class="suggestions" id="suggestions">
+          <button type="button">Show my latest meetings</button>
+          <button type="button">What did we discuss today?</button>
+          <button type="button">Find meetings with open action items</button>
+        </div>
+        <div class="chatMessages" id="chatMessages" aria-live="polite">
+          <div class="message assistantMessage">
+            <div class="assistantAvatar small" aria-hidden="true">✦</div>
+            <div class="messageBubble">Ask me to retrieve an old meeting or find where a topic was discussed.</div>
+          </div>
+        </div>
+        <form id="chatForm" class="chatComposer">
+          <input id="chatInput" maxlength="500" autocomplete="off"
+                 placeholder="Ask about your meeting notes…" aria-label="Ask your meeting notes">
+          <button id="chatSend" type="submit">Ask <span aria-hidden="true">↑</span></button>
+        </form>
+      </section>
     </section>
   </main>
+
+  <dialog id="viewer" class="viewer">
+    <header class="viewerBar">
+      <div class="viewerHeading">
+        <span class="eyebrow" id="viewerDate">Meeting note</span>
+        <strong id="viewerTitle">Meeting note</strong>
+      </div>
+      <div class="viewerActions">
+        <button id="convertPdf" class="viewerButton" type="button">
+          <span aria-hidden="true">⇩</span> Convert to PDF
+        </button>
+        <button id="sharePdf" class="viewerButton primary" type="button">
+          <span aria-hidden="true">↗</span> Share
+        </button>
+        <button id="closeViewer" class="iconBtn" type="button" aria-label="Close note">×</button>
+      </div>
+    </header>
+    <div class="viewerTabsBar">
+      <nav class="viewerTabs" aria-label="Meeting note views" role="tablist">
+        <button id="minutesView" class="viewerTab active" type="button"
+                role="tab" aria-selected="true">
+          <span class="viewerTabNumber" aria-hidden="true">1</span>
+          <span class="viewerTabCopy">
+            <strong>Minutes of Meeting</strong>
+            <small>Decisions and action items</small>
+          </span>
+        </button>
+        <button id="discussionView" class="viewerTab" type="button"
+                role="tab" aria-selected="false">
+          <span class="viewerTabNumber" aria-hidden="true">2</span>
+          <span class="viewerTabCopy">
+            <strong>Discussion Summary</strong>
+            <small>Topics, reasoning and context</small>
+          </span>
+        </button>
+        <button id="translationView" class="viewerTab" type="button"
+                role="tab" aria-selected="false">
+          <span class="viewerTabNumber" aria-hidden="true">3</span>
+          <span class="viewerTabCopy">
+            <strong>Conversation Transcript</strong>
+            <small>Full conversation in Hinglish</small>
+          </span>
+        </button>
+      </nav>
+      <label id="translationLanguageWrap" class="summaryLanguage" hidden>
+        <span>Conversation language</span>
+        <select id="translationLanguage" aria-label="Transcript language">
+          <option>Hinglish</option>
+          <option>Hindi</option>
+          <option>English</option>
+          <option>Bengali</option>
+          <option>Marathi</option>
+          <option>Gujarati</option>
+          <option>Tamil</option>
+          <option>Telugu</option>
+          <option>Kannada</option>
+          <option>Malayalam</option>
+          <option>Spanish</option>
+          <option>French</option>
+          <option>German</option>
+          <option>Portuguese</option>
+          <option>Arabic</option>
+        </select>
+      </label>
+    </div>
+    <div id="viewerStatus" class="viewerStatus" aria-live="polite" hidden></div>
+    <article id="noteBody" class="noteBody"></article>
+  </dialog>
   <script src="/app.js"></script>
 </body>
 </html>

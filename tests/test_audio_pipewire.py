@@ -1,6 +1,16 @@
+from pathlib import Path
+
 import pytest
 
 from beyondmeetings.audio.pipewire import PipeWireRecorder, build_filename_base
+
+
+@pytest.fixture(autouse=True)
+def capture_tools(monkeypatch):
+    monkeypatch.setattr(
+        "beyondmeetings.audio.pipewire.shutil.which",
+        lambda name: f"/usr/bin/{name}",
+    )
 
 
 class FakeRunner:
@@ -9,9 +19,13 @@ class FakeRunner:
     def __init__(self):
         self.commands = []
         self.next_module_id = 100
+        self.running = {}
 
     def run(self, args) -> str:
         self.commands.append(args)
+        if args and args[0] == "kill":
+            self.running[int(args[-1])] = False
+            return ""
         if args[:2] == ["pactl", "load-module"]:
             self.next_module_id += 1
             return str(self.next_module_id)
@@ -23,7 +37,12 @@ class FakeRunner:
 
     def spawn(self, args) -> int:
         self.commands.append(args)
+        Path(args[-1]).write_bytes(b"RIFF" + b"\0" * 40)
+        self.running[4242] = True
         return 4242
+
+    def is_running(self, pid) -> bool:
+        return self.running.get(pid, False)
 
 
 def test_filename_base_is_slugified_with_timestamp():
@@ -68,6 +87,48 @@ def test_start_writes_first_segment_path(tmp_path):
     runner = FakeRunner()
     state = PipeWireRecorder(data_dir=tmp_path, runner=runner).start("Standup")
     assert state.segments[0].endswith("_seg000.wav")
+
+
+def test_start_uses_parec_with_the_mix_monitor(tmp_path):
+    runner = FakeRunner()
+    PipeWireRecorder(data_dir=tmp_path, runner=runner).start("Standup")
+    capture = next(c for c in runner.commands if c and c[0] == "parec")
+    assert "--device=meeting_mix.monitor" in capture
+    assert "--file-format=wav" in capture
+
+
+def test_start_falls_back_to_pw_record_when_parec_is_missing(tmp_path, monkeypatch):
+    monkeypatch.setattr(
+        "beyondmeetings.audio.pipewire.shutil.which",
+        lambda name: None if name == "parec" else f"/usr/bin/{name}",
+    )
+    runner = FakeRunner()
+    PipeWireRecorder(data_dir=tmp_path, runner=runner).start("Standup")
+    capture = next(c for c in runner.commands if c and c[0] == "pw-record")
+    assert capture[1:3] == ["--target", "meeting_mix.monitor"]
+
+
+def test_start_explains_when_neither_capture_tool_exists(tmp_path, monkeypatch):
+    monkeypatch.setattr(
+        "beyondmeetings.audio.pipewire.shutil.which", lambda _name: None
+    )
+    recorder = PipeWireRecorder(data_dir=tmp_path, runner=FakeRunner())
+    with pytest.raises(RuntimeError, match="neither parec nor pw-record"):
+        recorder.start("Standup")
+    assert recorder.status() is None
+
+
+def test_start_fails_immediately_when_capture_process_exits(tmp_path):
+    class DeadRunner(FakeRunner):
+        def spawn(self, args):
+            self.commands.append(args)
+            self.running[4242] = False
+            return 4242
+
+    recorder = PipeWireRecorder(data_dir=tmp_path, runner=DeadRunner())
+    with pytest.raises(RuntimeError, match="exited before writing"):
+        recorder.start("Standup")
+    assert recorder.status() is None
 
 
 def test_status_reflects_persisted_state(tmp_path):

@@ -33,7 +33,7 @@ MICROPHONE_REASON = (
 # macOS attributes privacy grants through the process tree, and an extra shell
 # in the middle is one more thing that can confuse that.
 LAUNCHER = """#!/bin/sh
-exec "{executable}" open
+exec "{executable}" app
 """
 
 
@@ -55,8 +55,7 @@ def info_plist() -> dict:
         "CFBundleShortVersionString": "0.1.0",
         "CFBundleVersion": "0.1.0",
         "LSMinimumSystemVersion": MINIMUM_MACOS,
-        # The app is a launcher for a local web UI; it has no Dock presence of
-        # its own beyond opening the browser.
+        # The local web UI is hosted inside a native desktop window.
         "LSUIElement": False,
         "NSMicrophoneUsageDescription": MICROPHONE_REASON,
         "NSHighResolutionCapable": True,

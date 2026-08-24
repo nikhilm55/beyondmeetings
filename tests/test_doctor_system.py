@@ -6,11 +6,23 @@ def test_pipewire_ok_when_both_binaries_present(monkeypatch):
     assert PipeWireCheck().detect().status == "ok"
 
 
-def test_pipewire_missing_when_pw_record_absent(monkeypatch):
-    monkeypatch.setattr("shutil.which", lambda n: None if n == "pw-record" else "/usr/bin/x")
+def test_pipewire_accepts_pw_record_when_parec_is_absent(monkeypatch):
+    monkeypatch.setattr(
+        "shutil.which", lambda n: None if n == "parec" else "/usr/bin/x"
+    )
+    result = PipeWireCheck().detect()
+    assert result.status == "ok"
+    assert "pw-record" in result.detail
+
+
+def test_pipewire_missing_when_both_capture_tools_are_absent(monkeypatch):
+    monkeypatch.setattr(
+        "shutil.which",
+        lambda n: None if n in {"parec", "pw-record"} else "/usr/bin/x",
+    )
     result = PipeWireCheck().detect()
     assert result.status == "missing"
-    assert "pw-record" in result.detail
+    assert "parec or pw-record" in result.detail
 
 
 def test_pipewire_is_not_auto_fixable():
