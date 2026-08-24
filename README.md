@@ -291,7 +291,7 @@ Run `beyondmeetings doctor` at any time to see what is missing.
 |---|---|---|
 | **Linux** | PipeWire null sink | Supported and in daily use |
 | **macOS 13+** | ScreenCaptureKit + AVFoundation | Implemented, **not yet verified on hardware** |
-| **Windows 10+** | WASAPI loopback + microphone | Implemented; hardware verification needed |
+| **Windows 10+/11** | WASAPI loopback + microphone | One-line install, tested in CI; **capture not yet verified on hardware** |
 
 Everything above the capture layer — transcription, analysis, notes, task
 board, dashboard — is shared, so a new platform is one backend and its
@@ -299,17 +299,59 @@ packaging, not a fork.
 
 ### Windows
 
-Open PowerShell in the downloaded project directory and run:
+One line in PowerShell — no download, no execution-policy change:
 
 ```powershell
-Set-ExecutionPolicy -Scope Process Bypass
-.\install.ps1
+irm -useb https://raw.githubusercontent.com/nikhilm55/beyondmeetings/main/install.ps1 | iex
 ```
 
-The installer creates an isolated environment under Local AppData, adds a
-Start Menu shortcut, and opens the native setup window. Windows capture uses
-WASAPI loopback for everyone else on the call and the default microphone for
-your voice.
+Piping to `iex` never writes a `.ps1` to disk, and PowerShell's execution
+policy only governs script *files*, so `Set-ExecutionPolicy` is not needed.
+
+Prefer to read it first? That is reasonable:
+
+```powershell
+irm -useb https://raw.githubusercontent.com/nikhilm55/beyondmeetings/main/install.ps1 -OutFile install.ps1
+notepad install.ps1
+& ([scriptblock]::Create((Get-Content -Raw .\install.ps1)))
+```
+
+The same script-block form is how you pass a switch, since a piped script
+cannot take arguments:
+
+```powershell
+& ([scriptblock]::Create((irm -useb <url>))) -DryRun
+```
+
+It prefers a usable system Python, falls back to
+[uv](https://astral.sh/uv) (which brings its own) when there isn't one, and
+installs into `%LOCALAPPDATA%\beyondMeetings\app` — deliberately separate from
+`%LOCALAPPDATA%\beyondmeetings`, where your recordings live, so removing the
+program can never remove your meetings. It then adds a Start Menu shortcut, a
+`beyondmeetings` command shim, and opens the setup window.
+
+Capture uses WASAPI loopback for everyone else on the call and the default
+microphone for your voice.
+
+**The bash one-liner does not work on Windows.** `curl … | bash` needs a shell
+Windows does not ship. Running it under Git Bash or MSYS stops with a pointer
+to the command above rather than half-installing, because a Windows virtualenv
+puts Python in `Scripts\` and freedesktop `.desktop` files mean nothing there.
+
+**WSL is refused by default, on purpose.** Inside WSL the install would
+succeed and then record silence — WSL cannot capture audio playing on the
+Windows host, which is exactly the audio of your meeting. To install the Linux
+build inside WSL anyway (say, to record audio playing inside WSL itself), set
+`BEYONDMEETINGS_ALLOW_WSL=1`.
+
+To remove it:
+
+```powershell
+irm -useb https://raw.githubusercontent.com/nikhilm55/beyondmeetings/main/uninstall.ps1 | iex
+```
+
+Recordings, transcripts and stored API keys are kept unless you pass
+`-PurgeData` or `-PurgeKeys` through the script-block form.
 
 ### macOS
 
@@ -556,8 +598,18 @@ Removes the program, the command, your settings and the start-at-login entry.
 ./uninstall.sh --purge-data    # also delete recordings and transcripts
 ```
 
+On Windows, `uninstall.ps1` has the same contract and the same three switches
+(`-DryRun`, `-PurgeKeys`, `-PurgeData`):
+
+```powershell
+irm -useb https://raw.githubusercontent.com/nikhilm55/beyondmeetings/main/uninstall.ps1 | iex
+```
+
 The program is deliberately installed to a *different* directory from your
-recordings, so removing it can never take your meetings with it.
+recordings, so removing it can never take your meetings with it. Windows needs
+one extra care: `platformdirs` resolves the config directory to the *same* path
+as the data directory there, so the uninstaller removes `config.toml` as a
+single file rather than deleting the folder your recordings sit in.
 
 ---
 

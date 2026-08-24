@@ -65,6 +65,49 @@ python_is_usable() {
 
 OS="$(uname -s)"
 
+PS_ONE_LINER="irm -useb https://raw.githubusercontent.com/nikhilm55/beyondmeetings/main/install.ps1 | iex"
+
+# Git Bash, MSYS and Cygwin are a trap: uname reports MINGW*/MSYS*/CYGWIN*, so
+# this script would run to completion — but a Windows venv puts python in
+# Scripts/ rather than bin/, symlinks need developer mode, and .desktop files
+# mean nothing. Stop before creating any directory rather than half-installing.
+case "$OS" in
+  MINGW* | MSYS* | CYGWIN*)
+    {
+      echo "This is a Windows shell ($OS), where this installer cannot work."
+      echo
+      echo "Install beyondMeetings from PowerShell instead:"
+      echo
+      echo "  $PS_ONE_LINER"
+      echo
+      echo "Nothing was installed."
+    } >&2
+    exit 1
+    ;;
+esac
+
+# WSL is genuinely Linux, so this script would succeed and look fine. But
+# PipeWire inside WSL cannot hear a Teams or Zoom call running on Windows, so
+# the recording comes out silent. Refuse by default, and keep an escape hatch
+# for anyone deliberately recording audio that plays inside WSL itself.
+if [ -z "${BEYONDMEETINGS_ALLOW_WSL:-}" ] &&
+  grep -qi microsoft /proc/version 2>/dev/null; then
+  {
+    echo "WSL detected."
+    echo
+    echo "Recording the audio of a Windows meeting needs the native Windows"
+    echo "install, because WSL cannot capture audio playing on the host:"
+    echo
+    echo "  $PS_ONE_LINER"
+    echo
+    echo "To install the Linux build inside WSL anyway, re-run with:"
+    echo "  BEYONDMEETINGS_ALLOW_WSL=1"
+    echo
+    echo "Nothing was installed."
+  } >&2
+  exit 1
+fi
+
 venv_hint() {
   if [ "$OS" = "Darwin" ]; then
     echo "xcode-select --install   # or: brew install python"
