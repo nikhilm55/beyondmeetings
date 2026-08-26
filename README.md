@@ -323,6 +323,36 @@ cannot take arguments:
 & ([scriptblock]::Create((irm -useb <url>))) -DryRun
 ```
 
+#### If the one-liner cannot reach GitHub
+
+On networks that block or intercept `raw.githubusercontent.com`, `irm` fails
+before the installer is ever fetched, typically with `The underlying
+connection was closed: An unexpected error occurred on a send`. The same
+mirror the Linux instructions use serves the PowerShell installer:
+
+```powershell
+irm -useb https://cdn.jsdelivr.net/gh/nikhilm55/beyondmeetings@main/install.ps1 | iex
+```
+
+If the mirror is unreachable too, clone and run instead. Nothing is fetched
+from `raw.githubusercontent.com` on this path, and the installer builds from
+the checkout rather than downloading the project again:
+
+```powershell
+git clone https://github.com/nikhilm55/beyondmeetings
+cd beyondmeetings
+.\install.cmd
+```
+
+`install.cmd` can also be double-clicked in Explorer. It runs `install.ps1`
+with `-ExecutionPolicy Bypass` scoped to that one process, so the machine's
+policy is never changed. Switches pass straight through: `.\install.cmd
+-DryRun`. `uninstall.cmd` is the counterpart.
+
+One hop remains outbound: if no usable Python 3.10+ is found, the installer
+fetches uv from `astral.sh`. Installing Python first — `winget install
+Python.Python.3.12` — avoids it entirely.
+
 It prefers a usable system Python, falls back to
 [uv](https://astral.sh/uv) (which brings its own) when there isn't one, and
 installs into `%LOCALAPPDATA%\beyondMeetings\app` — deliberately separate from

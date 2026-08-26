@@ -19,6 +19,17 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+
+# Windows PowerShell 5.1 is on .NET Framework, whose SecurityProtocol default
+# can still be TLS 1.0 on a locked-down or unpatched machine. The uv download
+# below then dies with "The underlying connection was closed". -bor rather
+# than assignment so PowerShell 7's TLS 1.3 is not knocked out; try/catch
+# because the enum member is absent on very old .NET.
+try {
+    [Net.ServicePointManager]::SecurityProtocol =
+        [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
+} catch { }
+
 $MinVersion = "3.10"
 
 # Deliberately not the data directory: recordings and transcripts live under
