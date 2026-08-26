@@ -1,0 +1,7 @@
+# Batch and PowerShell files must reach Windows with CRLF: cmd.exe can mis-parse
+# labels and goto in an LF-only .cmd. Shell scripts must stay LF or bash fails
+# on the shebang.
+*.cmd text eol=crlf
+*.bat text eol=crlf
+*.ps1 text eol=crlf
+*.sh  text eol=lf
