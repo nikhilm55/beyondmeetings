@@ -32,7 +32,9 @@ def _fake_helper(tmp_path, payload):
         / "bmcapture"
     )
     helper.parent.mkdir(parents=True, exist_ok=True)
-    helper.write_text(f"#!/bin/sh\ncat <<'JSON'\n{payload}\nJSON\n")
+    helper.write_text(
+        f"#!/bin/sh\ncat <<'JSON'\n{payload}\nJSON\n", encoding="utf-8"
+    )
     helper.chmod(0o755)
     return helper
 

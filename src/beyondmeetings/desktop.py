@@ -187,7 +187,7 @@ def launch_server(port: int = DEFAULT_PORT, log_dir: Path | None = None) -> int:
     """Start the server detached, so it outlives the launcher process."""
     log_dir = Path(log_dir or Path.home() / ".local" / "share" / APP_ID)
     log_dir.mkdir(parents=True, exist_ok=True)
-    log = (log_dir / "server.log").open("a")
+    log = (log_dir / "server.log").open("a", encoding="utf-8")
 
     process = subprocess.Popen(
         [resolve_executable(), "serve", "--no-browser", "--port", str(port)],

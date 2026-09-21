@@ -60,7 +60,11 @@ def test_missing_meetings_dir_returns_empty(tmp_path):
 def test_backlink_appends_to_existing_followups_section(tmp_path):
     _write(tmp_path, "2026-07-29", "Prev")
     path = tmp_path / "Meetings" / "2026-07-29" / "Prev.md"
-    path.write_text(path.read_text(encoding="utf-8") + "\n## Follow-ups\n- Something earlier.\n\n---\n")
+    path.write_text(
+        path.read_text(encoding="utf-8")
+        + "\n## Follow-ups\n- Something earlier.\n\n---\n",
+        encoding="utf-8",
+    )
     append_followup_backlink(
         path, MeetingRef(date="2026-07-30", title="Next Meeting")
     )
