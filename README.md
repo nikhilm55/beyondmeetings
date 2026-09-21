@@ -274,8 +274,8 @@ meeting before it starts. Say "start recording" and deal with the name later.
 
 You also need:
 
-- **ffmpeg** — the installer offers to install it
-  (`brew install ffmpeg` on macOS)
+- **ffmpeg** — the installer offers to install it on Linux and fetches it
+  for you on Windows (`brew install ffmpeg` on macOS)
 - A **Groq API key** for transcription (free tier is ample), *or* local
   whisper.cpp
 - A way to write notes — **your existing Claude/ChatGPT/Gemini subscription
@@ -334,9 +334,9 @@ mirror the Linux instructions use serves the PowerShell installer:
 irm -useb https://cdn.jsdelivr.net/gh/nikhilm55/beyondmeetings@main/install.ps1 | iex
 ```
 
-If the mirror is unreachable too, clone and run instead. Nothing is fetched
-from `raw.githubusercontent.com` on this path, and the installer builds from
-the checkout rather than downloading the project again:
+If the mirror is unreachable too, download and run instead. Nothing is
+fetched from `raw.githubusercontent.com` on this path, and the installer
+builds from the checkout rather than downloading the project again:
 
 ```powershell
 git clone https://github.com/nikhilm55/beyondmeetings
@@ -344,21 +344,39 @@ cd beyondmeetings
 .\install.cmd
 ```
 
+No git? Use the **Code → Download ZIP** button on the repository page,
+unblock the file (right-click → Properties → Unblock), extract it, and
+double-click `install.cmd` inside. git is convenient here, never required.
+
 `install.cmd` can also be double-clicked in Explorer. It runs `install.ps1`
 with `-ExecutionPolicy Bypass` scoped to that one process, so the machine's
 policy is never changed. Switches pass straight through: `.\install.cmd
 -DryRun`. `uninstall.cmd` is the counterpart.
 
-One hop remains outbound: if no usable Python 3.10+ is found, the installer
-fetches uv from `astral.sh`. Installing Python first — `winget install
-Python.Python.3.12` — avoids it entirely.
+#### What it installs on a machine that has nothing
 
-It prefers a usable system Python, falls back to
-[uv](https://astral.sh/uv) (which brings its own) when there isn't one, and
-installs into `%LOCALAPPDATA%\beyondMeetings\app` — deliberately separate from
-`%LOCALAPPDATA%\beyondmeetings`, where your recordings live, so removing the
-program can never remove your meetings. It then adds a Start Menu shortcut, a
-`beyondmeetings` command shim, and opens the setup window.
+It assumes a freshly imaged Windows: no Python, no git, no ffmpeg, and on
+Windows 10 often no WebView2 runtime. Each is detected and fetched rather than
+assumed, and each has a second route.
+
+| Missing | How it is obtained |
+|---|---|
+| Python 3.10+ | A usable system Python, else [uv](https://astral.sh/uv) from `astral.sh` (it brings its own CPython), else `winget install Python.Python.3.12` |
+| The project itself | The checkout you ran it from, else the source zip from GitHub. **git is never required** — `pip install … @ git+<url>` shells out to git, and a git-only installer is the reason a clean machine once failed |
+| ffmpeg | `winget install Gyan.FFmpeg`, else a static build downloaded into `%LOCALAPPDATA%\beyondMeetings\bin`, which the app searches alongside `PATH` |
+| WebView2 runtime | Microsoft's Evergreen bootstrapper, installed per-user, so no admin prompt |
+
+It installs into `%LOCALAPPDATA%\beyondMeetings\app` — deliberately separate
+from `%LOCALAPPDATA%\beyondmeetings`, where your recordings live, so removing
+the program can never remove your meetings. It then adds a Start Menu
+shortcut, a `beyondmeetings` command shim, and opens the setup window.
+
+**Once the application itself is installed, nothing that follows can fail the
+run.** A prerequisite it could not fetch is reported and the install still
+succeeds; `beyondmeetings doctor` retries any of them later, using the same
+code the installer used. The whole run is logged to
+`%TEMP%\beyondmeetings-install.log` — that is the file to send if something
+still goes wrong. Pass `-NoLaunch` to install without opening the app.
 
 Capture uses WASAPI loopback for everyone else on the call and the default
 microphone for your voice.

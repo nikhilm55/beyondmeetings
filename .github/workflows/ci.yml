@@ -84,3 +84,44 @@ jobs:
         if: runner.os == 'Windows'
         shell: pwsh
         run: ./uninstall.ps1 -DryRun
+
+      # The bug this guards: `pip install ... @ git+<url>` shells out to git,
+      # so the installer worked on every developer machine and every runner
+      # and failed on a freshly imaged Windows, which has no git. Hiding git
+      # is the only way to notice that from CI.
+      - name: install.ps1 installs end to end with no git on PATH
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $env:Path = ($env:Path -split ';' |
+              Where-Object { $_ -and $_ -notmatch '[\\/]Git[\\/]' }) -join ';'
+          if (Get-Command git -ErrorAction SilentlyContinue) {
+              throw "git is still reachable; this step proves nothing"
+          }
+          ./install.ps1 -NoLaunch
+          if ($LASTEXITCODE -ne 0) { throw "installer exited $LASTEXITCODE" }
+
+      - name: the installed command runs
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $shim = Join-Path $env:LOCALAPPDATA "beyondMeetings\bin\beyondmeetings.cmd"
+          if (-not (Test-Path $shim)) { throw "no shim at $shim" }
+          & $shim --help
+          if ($LASTEXITCODE -ne 0) { throw "the installed command exited $LASTEXITCODE" }
+
+      - name: the run is logged where a user can find it
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $log = Join-Path $env:TEMP "beyondmeetings-install.log"
+          if (-not (Test-Path $log)) { throw "no install log at $log" }
+          Get-Content $log
+
+      - name: uninstall removes what install added
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          ./uninstall.ps1
+          $app = Join-Path $env:LOCALAPPDATA "beyondMeetings\app"
+          if (Test-Path $app) { throw "$app survived the uninstall" }

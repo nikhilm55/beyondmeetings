@@ -179,11 +179,70 @@ One review item did not hold up: `pipeline.py:71` was reported as missing an
 encoding, but the argument is on line 79 of the same call. `discussion.py` and
 `desktop.py` were already explicit too.
 
+## Follow-up: the bare-machine install (2026-09-21)
+
+The first person to run this on a **freshly installed Windows** could not
+install. The cause was the install contract above quietly assuming a developer
+machine:
+
+- `pip install "beyondmeetings[desktop] @ git+<url>"` shells out to `git`, and
+  a clean Windows has none. Every developer box and every CI runner has git,
+  so nothing here could see it. The documented fallback — `git clone` — was
+  equally unavailable.
+- ffmpeg was never installed or even checked on Windows. `install_hint()`
+  offered `apt`/`dnf`. The install "succeeded" and the first transcription
+  failed.
+- WebView2, which `pywebview` draws the window in, ships with Windows 11 but
+  not always with Windows 10. Without it the installer's last act — opening
+  the app — fails.
+- The app's exit code *was* the installer's exit code, so `install.cmd`
+  reported "Installation failed" for an install that had worked.
+
+### What changed
+
+- **git is optional.** The source comes from the checkout beside the script,
+  else GitHub's source zip fetched with `Invoke-WebRequest`; the `git+` spec
+  survives only as a third fallback.
+- **Python has three routes**, not two: a usable system Python, then uv, then
+  `winget install Python.Python.3.12`. Each result is checked rather than
+  assumed, so a blocked `astral.sh` produces a sentence and a retry, not a
+  raw PowerShell terminating error.
+- **`provision_windows.py`** fetches ffmpeg (winget, else a static build into
+  `%LOCALAPPDATA%\beyondMeetings\bin`) and the WebView2 Evergreen
+  bootstrapper. It is Python, not more PowerShell, for the same reason
+  `desktop_windows.py` is: `doctor` needs the identical behaviour afterwards,
+  one implementation cannot drift from itself, and every edge — network,
+  winget, registry, the Microsoft installer — is injected, so it is
+  unit-tested on the Linux development machine.
+- **`tools.which_tool`** searches the app's own bin directory as well as
+  `PATH`, so fetching ffmpeg needs no registry PATH edit. It returns exactly
+  `shutil.which` off Windows, which `tests/test_tools.py` pins.
+- **A point of no return.** Once the application is installed, no later step
+  may exit non-zero; a prerequisite that could not be fetched is a reported
+  row. `tests/test_install_ps1.py` asserts there is no `exit 1` after that
+  marker comment, and that every earlier one points at
+  `%TEMP%\beyondmeetings-install.log`.
+
+### Verification added
+
+- `tests/test_install_ps1.py` lifts `Get-ProjectSource` out of `install.ps1`
+  by parsing it, and runs it against a zip served over loopback — so "no git
+  is required" is executed, not grepped. It runs wherever `pwsh` exists,
+  which is both CI platforms.
+- A CI step installs end to end on `windows-latest` with `git` stripped from
+  `PATH`, then runs the installed command and uninstalls again. That step is
+  the regression guard for the original bug.
+- `docs/windows-smoke-test.md` gains section 0: run it on a clean VM, and
+  again with the network cut, to prove an unfetchable prerequisite still
+  leaves a working install.
+
 ## Known limits
 
-- Neither `install.ps1` nor `uninstall.ps1` has been executed. No PowerShell
-  exists on the development machine; the first real validation is the CI
-  parse-and-dry-run job.
+- The installers are still only *partly* executed by CI. `install.ps1` now
+  runs end to end on `windows-latest`, but that runner has Python and
+  WebView2 already, so the uv and winget Python routes and the WebView2
+  bootstrapper remain exercised only by unit tests and by section 0 of the
+  smoke test.
 - The suite has never run on Windows before. The first `windows-latest` run may
   surface pre-existing POSIX assumptions beyond the four modules guarded here —
   `test_secrets.py` asserts `0o600` file modes and `test_mcp_setup.py` creates a

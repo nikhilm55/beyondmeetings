@@ -15,6 +15,7 @@ from ..desktop_windows import (
     shortcut_path,
     startup_shortcut_path,
 )
+from ..provision_windows import ensure_webview2, registry_version
 from .base import Check, CheckResult
 
 
@@ -31,6 +32,43 @@ class WindowsAudioCheck(Check):
                 detail="SoundCard is missing; reinstall the Windows application.",
             )
         return CheckResult(status="ok", detail="WASAPI capture is available.")
+
+
+class WebView2Check(Check):
+    """The runtime pywebview draws the desktop window in.
+
+    Windows 11 ships it; a freshly installed Windows 10 often does not, and
+    without it the app window fails to open. Not `required`, because the same
+    UI is reachable in a browser at 127.0.0.1:7788 — but a user who installed
+    a desktop app wants a desktop window, so doctor offers to fetch it.
+    """
+
+    id = "webview2"
+    label = "App window runtime"
+    description = "Microsoft Edge WebView2 draws the beyondMeetings window."
+    required = False
+
+    def detect(self) -> CheckResult:
+        version = registry_version()
+        if version:
+            return CheckResult(status="ok", detail=f"WebView2 {version}")
+        return CheckResult(
+            status="missing",
+            detail=(
+                "Not installed. The app window will not open, though the same "
+                "page works in a browser at http://127.0.0.1:7788."
+            ),
+        )
+
+    @property
+    def fixable(self) -> bool:
+        return True
+
+    def fix(self, **kwargs) -> CheckResult:
+        outcome = ensure_webview2()
+        if not outcome.satisfied:
+            return CheckResult(status="missing", detail=outcome.detail)
+        return self.detect()
 
 
 class StartMenuShortcutCheck(Check):

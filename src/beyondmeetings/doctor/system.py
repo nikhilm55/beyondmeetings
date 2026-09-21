@@ -3,7 +3,9 @@ from __future__ import annotations
 
 import shutil
 import subprocess
+import sys
 
+from ..tools import which_tool
 from .base import Check, CheckResult
 
 MANAGERS = [
@@ -13,8 +15,19 @@ MANAGERS = [
     ("zypper", "sudo zypper install -y {pkg}"),
 ]
 
+# Windows has no package manager we can count on — winget is on current
+# Windows 11 and missing from plenty of Windows 10 machines — so the hint
+# points at the thing that always works: let the app fetch it.
+WINDOWS_HINT = (
+    "Not found. Run 'beyondmeetings doctor' and fix this row to download it, "
+    "or install it yourself with: winget install Gyan.FFmpeg"
+)
 
-def install_hint(package: str) -> str:
+
+def install_hint(package: str, platform: str | None = None) -> str:
+    platform = platform if platform is not None else sys.platform
+    if platform == "win32":
+        return WINDOWS_HINT
     for binary, template in MANAGERS:
         if shutil.which(binary):
             return template.format(pkg=package)
@@ -57,7 +70,7 @@ class FfmpegCheck(Check):
     required = True
 
     def detect(self) -> CheckResult:
-        found = shutil.which("ffmpeg")
+        found = which_tool("ffmpeg")
         if not found:
             return CheckResult(status="missing", detail=install_hint("ffmpeg"))
         return CheckResult(status="ok", detail=found)
@@ -67,6 +80,9 @@ class FfmpegCheck(Check):
         return True
 
     def fix(self, **kwargs) -> CheckResult:
+        if sys.platform == "win32":
+            return self._fix_windows()
+
         command = install_hint("ffmpeg")
         if not command.startswith("sudo"):
             return CheckResult(status="missing", detail=command)
@@ -77,3 +93,21 @@ class FfmpegCheck(Check):
                 detail=f"Install failed. Run manually: {command}",
             )
         return self.detect()
+
+    def _fix_windows(self) -> CheckResult:
+        """Fetch ffmpeg the same way the installer does, sharing its code."""
+        from ..provision_windows import ensure_ffmpeg
+
+        outcome = ensure_ffmpeg()
+        if not outcome.satisfied:
+            return CheckResult(status="missing", detail=outcome.detail)
+
+        result = self.detect()
+        if result.status == "ok":
+            return result
+        # The winget route puts ffmpeg on PATH, but this process read its
+        # environment before that happened. Say so rather than claim ok.
+        return CheckResult(
+            status="missing",
+            detail=f"{outcome.detail}. Restart beyondMeetings to pick it up.",
+        )

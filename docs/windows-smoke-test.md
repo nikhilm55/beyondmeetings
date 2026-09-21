@@ -11,6 +11,25 @@ that run. Everything here is Windows 11.
 Report results by editing the Status column and opening an issue for anything
 that fails.
 
+## 0. The bare machine
+
+**Run section 1 on a Windows VM with nothing installed on it**, not on a
+development box. This is not optional polish: the installer once required git,
+because `pip install … @ git+<url>` shells out to it. That passed on every
+developer machine and every CI runner, and failed on the only kind of machine
+a new user has. CI now hides git from `PATH` for one step, which catches that
+specific bug — but only that one.
+
+A clean VM is the only place the rows below mean anything. Snapshot it before
+installing so you can repeat the run.
+
+| # | Expected | Status |
+|---|---|---|
+| 0.1 | No Python, no git, no ffmpeg on the VM before you start | |
+| 0.2 | Section 1 completes anyway, without you installing anything by hand | |
+| 0.3 | Nothing prompts for admin (no UAC dialog at any point) | |
+| 0.4 | `%TEMP%\beyondmeetings-install.log` exists afterwards and reads sensibly | |
+
 ## 1. Install from one line
 
 Open PowerShell (no admin needed):
@@ -24,12 +43,19 @@ irm -useb https://raw.githubusercontent.com/nikhilm55/beyondmeetings/main/instal
 | 1.1 | No execution-policy error, and no `.ps1` left in the current directory | |
 | 1.2 | Reports the Python it chose, or that it fell back to uv | |
 | 1.3 | Creates `%LOCALAPPDATA%\beyondMeetings\app\venv` | |
-| 1.4 | Says it added the Start Menu shortcut | |
-| 1.5 | The setup window opens on its own | |
+| 1.4 | Reports a row each for ffmpeg and the WebView2 runtime | |
+| 1.5 | `%LOCALAPPDATA%\beyondMeetings\bin\ffmpeg.exe` exists, or ffmpeg is on `PATH` | |
+| 1.6 | Says it added the Start Menu shortcut | |
+| 1.7 | The setup window opens on its own | |
+| 1.8 | Exits 0 — `$LASTEXITCODE` is 0, and `install.cmd` does not print "Installation failed" | |
 
 If the machine has **no** Python at all, 1.2 must fall back to uv and still
-reach 1.5. That path is worth testing deliberately, on a clean VM if you have
-one.
+reach 1.7.
+
+Then pull the plug and do it again. With the VM's network disabled after the
+venv exists, 1.4 must report ffmpeg as missing and the install must still
+reach 1.8 — a prerequisite that cannot be fetched is a reported row, never a
+failed installation.
 
 ## 2. The command works
 
@@ -44,6 +70,12 @@ one.
 | 2.3 | An `App icon` row reports ok | |
 | 2.4 | A `Start at login` row reports **missing** (installing must not silently opt you in) | |
 | 2.5 | Fixing `Start at login` from the wizard makes it ok | |
+| 2.6 | An `ffmpeg` row reports ok | |
+| 2.7 | An `App window runtime` row reports ok | |
+| 2.8 | Deleting `bin\ffmpeg.exe`, then fixing the `ffmpeg` row, downloads it again | |
+
+2.8 is the other half of section 0: whatever the installer could not fetch,
+`doctor` has to be able to fetch later, through the same code.
 
 ## 3. Record something real
 
@@ -97,6 +129,7 @@ console entry point.
 | 6.3 | `%LOCALAPPDATA%\beyondmeetings\recordings` **still exists** | |
 | 6.4 | Your notes library is untouched | |
 | 6.5 | `-PurgeData` does remove recordings when asked | |
+| 6.6 | A bundled `bin\ffmpeg.exe` is removed, but an ffmpeg you installed yourself is not | |
 
 6.3 matters more than it looks: on Windows the config directory resolves to the
 same path as the data directory, so a careless uninstaller would delete

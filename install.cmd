@@ -36,7 +36,11 @@ set "RC=%ERRORLEVEL%"
 
 :done
 echo(
-if not "%RC%"=="0" echo Installation failed with exit code %RC%.
+if not "%RC%"=="0" (
+    echo Installation failed with exit code %RC%.
+    echo A log of the run is at "%TEMP%\beyondmeetings-install.log" - please
+    echo include it if you report this.
+)
 
 rem Double-clicked from Explorer, the window closes the instant this returns
 rem and the error goes unread. Started from a console, a pause is a nuisance.

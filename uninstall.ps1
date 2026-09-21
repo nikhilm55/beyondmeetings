@@ -130,6 +130,18 @@ Remove-Thing $StartMenu   "Start Menu shortcut"
 # BEYONDMEETINGS_BIN, so this can be a shared bin folder holding unrelated
 # executables. uninstall.sh removes a single symlink for the same reason.
 Remove-Thing $Shim "command shim"
+
+# ffmpeg, only when it is in the directory we chose ourselves. With
+# BEYONDMEETINGS_BIN pointing at a shared bin folder, an ffmpeg.exe there is
+# far more likely to be the user's own than the one install.ps1 fetched.
+if (-not $env:BEYONDMEETINGS_BIN) {
+    foreach ($tool in @("ffmpeg.exe", "ffprobe.exe")) {
+        $path = Join-Path $BinDir $tool
+        if (Test-Path -LiteralPath $path) {
+            Remove-Thing $path "bundled $tool"
+        }
+    }
+}
 if ((Test-Path -LiteralPath $BinDir) -and
     -not (Get-ChildItem -LiteralPath $BinDir -Force -ErrorAction SilentlyContinue)) {
     if ($DryRun) {
@@ -152,3 +164,10 @@ if ($PurgeData) {
 
 Write-Host ""
 Say "Done. Your notes library was not touched."
+
+# `& $Command stop` above exits non-zero when nothing is recording, which is
+# the normal case, and PowerShell keeps that in $LASTEXITCODE to the end of
+# the script. uninstall.cmd then announced "Uninstall failed with exit code 1"
+# after an uninstall that had removed everything it was asked to. Removals here
+# are all -ErrorAction SilentlyContinue, so there is no failure to report.
+exit 0

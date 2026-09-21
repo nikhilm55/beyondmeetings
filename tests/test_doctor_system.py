@@ -43,11 +43,22 @@ def test_ffmpeg_is_fixable():
     assert FfmpegCheck().fixable is True
 
 
+# platform is passed explicitly: these pin the package-manager mapping, which
+# is a Linux question. Left to sys.platform they asserted Linux strings on the
+# Windows runner and failed there.
 def test_install_hint_matches_the_available_package_manager(monkeypatch):
     monkeypatch.setattr("shutil.which", lambda n: "/usr/bin/dnf" if n == "dnf" else None)
-    assert install_hint("ffmpeg") == "sudo dnf install -y ffmpeg"
+    assert install_hint("ffmpeg", platform="linux") == "sudo dnf install -y ffmpeg"
 
 
 def test_install_hint_falls_back_when_no_manager_found(monkeypatch):
     monkeypatch.setattr("shutil.which", lambda n: None)
-    assert "package manager" in install_hint("ffmpeg")
+    assert "package manager" in install_hint("ffmpeg", platform="linux")
+
+
+def test_install_hint_on_windows_points_at_something_that_exists_there():
+    """apt and dnf are not answers on Windows, which is what it used to say."""
+    hint = install_hint("ffmpeg", platform="win32")
+
+    assert "apt" not in hint and "dnf" not in hint
+    assert "winget install Gyan.FFmpeg" in hint
