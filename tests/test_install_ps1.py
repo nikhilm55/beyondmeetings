@@ -62,6 +62,28 @@ def test_the_source_can_be_fetched_without_git():
     assert "/archive/refs/heads/" in SCRIPT
 
 
+def test_no_branch_name_is_hardcoded_as_the_default_source():
+    """This repository's default branch is `dev`; a fork's may be `master`.
+
+    A hardcoded `main` meant the piped install fetched install.ps1 from one
+    revision and then installed the *source* of another — silently, and only
+    on the path everybody actually uses.
+    """
+    building = [
+        line.strip() for line in SCRIPT.splitlines()
+        if "/archive/" in line and not line.lstrip().startswith("#")
+    ]
+    assert building, "no archive URL is built at all"
+    assert any("HEAD.zip" in line for line in building), building
+    assert not any('"main"' in line for line in building), building
+
+    defaulted = [
+        line.strip() for line in SCRIPT.splitlines()
+        if "$Ref =" in line and not line.lstrip().startswith("#")
+    ]
+    assert not any('"main"' in line for line in defaulted), defaulted
+
+
 def test_git_is_only_ever_a_fallback():
     """One line builds a git spec, and it sits in the else branch."""
     building = [
@@ -171,14 +193,22 @@ def test_the_batch_and_powershell_files_are_pinned_to_crlf():
 # parsing it, so the code under test is the shipped code.
 
 HARNESS = r"""
-param([string]$Installer, [string]$RepoBase, [string]$ScriptRoot = "")
+param(
+    [string]$Installer,
+    [string]$RepoBase,
+    [string]$ScriptRoot = "",
+    # Which of the two source URLs to drive. Both must be reachable from
+    # here: the default one is what every piped install uses, and an
+    # explicit ref is what a fork or a test branch uses.
+    [string]$Ref = ""
+)
 $ErrorActionPreference = "Stop"
 $ProgressPreference = "SilentlyContinue"
 
 # The script-scope variables the lifted functions close over.
 $LogPath = Join-Path ([System.IO.Path]::GetTempPath()) "bm-install-test.log"
 $Repo = $RepoBase
-$Ref = "main"
+$RefWasGiven = [bool]$Ref
 
 $ast = [System.Management.Automation.Language.Parser]::ParseFile(
     $Installer, [ref]$null, [ref]$null)
@@ -193,6 +223,33 @@ Invoke-Expression (($functions | ForEach-Object { $_.Extent.Text }) -join "`n")
 $result = Get-ProjectSource -ScriptRoot $ScriptRoot
 Write-Output "RESULT=$result"
 """
+
+
+def _unpacked_source(result, expected_name: str) -> Path:
+    """The directory Get-ProjectSource returned, insisting it returned one.
+
+    Reading RESULT= without these checks once made a test pass on a 404: the
+    lifted code fell through to git and returned an empty string, and
+    Path("") is the current directory — which, running from the repository,
+    holds a pyproject.toml. So the returned path has to be non-empty, and it
+    has to be the folder that came out of the archive this test served.
+    """
+    assert result.returncode == 0, result.stdout + result.stderr
+    lines = [x for x in result.stdout.splitlines() if x.startswith("RESULT=")]
+    assert lines, result.stdout + result.stderr
+
+    value = lines[-1].split("=", 1)[1].strip()
+    assert value, (
+        "Get-ProjectSource returned nothing, so it fell back to git:\n"
+        + result.stdout
+    )
+    source = Path(value)
+    assert source.is_absolute(), source
+    assert source != Path.cwd(), "that is the checkout, not a download"
+    assert source.name == expected_name, (
+        f"{source.name} did not come out of the archive that was served"
+    )
+    return source
 
 
 def _serve(directory: Path):
@@ -225,28 +282,51 @@ def test_it_really_downloads_and_unpacks_the_source_without_git(tmp_path):
 
     served = tmp_path / "served" / "archive" / "refs" / "heads"
     served.mkdir(parents=True)
-    with zipfile.ZipFile(served / "main.zip", "w") as bundle:
-        bundle.writestr("beyondmeetings-main/pyproject.toml", "[project]\n")
-        bundle.writestr("beyondmeetings-main/src/beyondmeetings/__init__.py", "")
+    with zipfile.ZipFile(served / "topic.zip", "w") as bundle:
+        bundle.writestr("beyondmeetings-topic/pyproject.toml", "[project]\n")
+        bundle.writestr("beyondmeetings-topic/src/beyondmeetings/__init__.py", "")
 
     harness = tmp_path / "run.ps1"  # deliberately not beside a pyproject.toml
     harness.write_text(HARNESS, encoding="utf-8")
 
     with _serve(tmp_path / "served") as base:
-        # PATH is emptied of everything but the system directories so the
-        # lifted code cannot reach a git it must not need.
+        result = subprocess.run(
+            ["pwsh", "-NoProfile", "-File", str(harness),
+             "-Installer", str(INSTALL), "-RepoBase", base, "-Ref", "topic"],
+            capture_output=True, text=True,
+        )
+
+    source = _unpacked_source(result, "beyondmeetings-topic")
+    assert (source / "pyproject.toml").is_file(), f"nothing unpacked at {source}"
+
+
+@pytest.mark.skipif(shutil.which("pwsh") is None, reason="PowerShell not installed")
+def test_with_no_ref_it_takes_the_repository_default_branch(tmp_path):
+    """The piped install asks for no ref, and GitHub resolves
+    /archive/HEAD.zip to whatever the default branch is — `dev` here.
+
+    This is the path every user is on, so it is the one worth running for
+    real. It used to request a branch literally named `main`.
+    """
+    import zipfile
+
+    served = tmp_path / "served" / "archive"
+    served.mkdir(parents=True)
+    with zipfile.ZipFile(served / "HEAD.zip", "w") as bundle:
+        bundle.writestr("beyondmeetings-abc123/pyproject.toml", "[project]\n")
+
+    harness = tmp_path / "run.ps1"
+    harness.write_text(HARNESS, encoding="utf-8")
+
+    with _serve(tmp_path / "served") as base:
         result = subprocess.run(
             ["pwsh", "-NoProfile", "-File", str(harness),
              "-Installer", str(INSTALL), "-RepoBase", base],
             capture_output=True, text=True,
         )
 
-    assert result.returncode == 0, result.stdout + result.stderr
-    line = [x for x in result.stdout.splitlines() if x.startswith("RESULT=")]
-    assert line, result.stdout + result.stderr
-
-    source = Path(line[-1].split("=", 1)[1].strip())
-    assert (source / "pyproject.toml").is_file(), f"nothing unpacked at {source}"
+    source = _unpacked_source(result, "beyondmeetings-abc123")
+    assert (source / "pyproject.toml").is_file()
 
 
 @pytest.mark.skipif(shutil.which("pwsh") is None, reason="PowerShell not installed")

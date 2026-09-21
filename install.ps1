@@ -3,7 +3,7 @@
 # Run it with one line, no download and no execution-policy change — piping to
 # iex never writes a .ps1 to disk, and the policy only governs script files:
 #
-#   irm -useb https://raw.githubusercontent.com/nikhilm55/beyondmeetings/main/install.ps1 | iex
+#   irm -useb https://raw.githubusercontent.com/nikhilm55/beyondmeetings/dev/install.ps1 | iex
 #
 # To pass a switch, create the script block explicitly:
 #
@@ -93,7 +93,9 @@ $Repo = if ($env:BEYONDMEETINGS_REPO) {
 # to the git fallback pins a fork whose default branch is master or dev to a
 # branch it does not have, where the bare URL used to resolve correctly.
 $RefWasGiven = [bool]$env:BEYONDMEETINGS_REF
-$Ref = if ($RefWasGiven) { $env:BEYONDMEETINGS_REF } else { "main" }
+# Only consulted when one *was* given. With no ref both source routes take
+# the repository's default branch instead — see Get-ProjectSource.
+$Ref = if ($RefWasGiven) { $env:BEYONDMEETINGS_REF } else { "" }
 
 $Venv = Join-Path $InstallRoot "venv"
 $VenvPython = Join-Path $Venv "Scripts\python.exe"
@@ -334,7 +336,18 @@ function Get-ProjectSource {
     # GitHub's archive path 404s with the suffix left on.
     $base = $Repo.TrimEnd('/')
     if ($base.EndsWith(".git")) { $base = $base.Substring(0, $base.Length - 4) }
-    $zipUrl = "$base/archive/refs/heads/$Ref.zip"
+    # HEAD, not a branch name, when the caller did not ask for one. This
+    # repository's default branch is `dev` and a fork's may be `master`, so
+    # the old hardcoded `main` installed a *different* revision than the
+    # installer itself was fetched from — silently, and only on the piped
+    # install path, which is the one everybody uses. GitHub resolves
+    # /archive/HEAD.zip to whatever the default branch is. It mirrors what
+    # the git fallback already does: a bare URL with no @ref.
+    $zipUrl = if ($RefWasGiven) {
+        "$base/archive/refs/heads/$Ref.zip"
+    } else {
+        "$base/archive/HEAD.zip"
+    }
 
     $scratch = Join-Path ([System.IO.Path]::GetTempPath()) `
         ("bm-src-" + [System.Guid]::NewGuid().ToString("N"))
