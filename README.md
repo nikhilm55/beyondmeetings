@@ -93,6 +93,10 @@ long meeting under rate limits.
 
 ## Installation
 
+> **On Windows?** Skip this section:
+> **[download beyondMeetings-Setup-x64.exe](https://github.com/nikhilm55/beyondmeetings/releases/latest/download/beyondMeetings-Setup-x64.exe)**
+> and double-click it. See [Windows](#windows) for the steps.
+
 **Step 1 — install it.** One command:
 
 ```bash
@@ -301,24 +305,42 @@ packaging, not a fork.
 
 #### The installer (recommended)
 
-Download **`beyondMeetings-Setup-x64.exe`** from
-[Releases](https://github.com/nikhilm55/beyondmeetings/releases) and
-double-click it. That is the whole procedure. There is nothing to install
-first — no Python, no git, no curl, no package manager — and no administrator
-password, because everything lands in your own `%LOCALAPPDATA%`.
+**[Download beyondMeetings-Setup-x64.exe](https://github.com/nikhilm55/beyondmeetings/releases/latest/download/beyondMeetings-Setup-x64.exe)**
+(about 110 MB). This link always points to the newest release. Older
+versions are on the [Releases](https://github.com/nikhilm55/beyondmeetings/releases) page.
 
-It also needs no internet connection. The interpreter, every dependency and
-ffmpeg are all *inside* the file, so it installs the same way on a locked-down
-laptop behind a proxy as on an open network. Expect around 200 MB to download
-once and about a minute of setup.
+1. Download **`beyondMeetings-Setup-x64.exe`** from the link above.
+2. Double-click it. Windows SmartScreen may warn that the app is from an
+   unknown publisher. Click **More info → Run anyway**.
+3. Click through the installer. It takes about a minute.
+4. Leave **Open beyondMeetings** ticked on the last page. The app opens in
+   your browser.
 
-64-bit Windows 10 or later. It runs on ARM64 Windows too, through the x64
-emulation those machines ship with.
+You don't need to install anything first: no Python, no git, no
+administrator password, and no internet connection during the install.
+Everything the app needs is inside the file, so it installs the same way on
+a locked-down laptop behind a proxy as on an open network.
 
-The app itself opens in your browser at `http://127.0.0.1:7788` — the Start
-Menu shortcut starts it if it is not already running and brings up the page
-either way. Uninstall it from **Settings → Apps → Installed apps** like any
-other program; your recordings and notes are kept.
+**Requirements:** 64-bit Windows 10 or 11. It also runs on ARM64 Windows,
+through the x64 emulation those machines ship with.
+
+**First run.** A setup page opens in your browser. Before you can record, it
+asks you to:
+
+- add a **Groq API key** for transcription,
+- choose how notes are written (Claude Code sign-in, or an API key for
+  another provider),
+- create your local notes library (one click).
+
+Afterwards, open beyondMeetings from the Start Menu at any time. It runs in
+your browser at `http://127.0.0.1:7788`, and the Start Menu entry starts it if
+it isn't already running.
+
+**Uninstall.** **Settings → Apps → Installed apps → beyondMeetings →
+Uninstall.** Your recordings and notes are kept.
+
+**If something goes wrong,** send the file `%TEMP%\beyondmeetings-setup.log`
+(paste that path into the Explorer address bar).
 
 <details>
 <summary>What the installer puts where</summary>
