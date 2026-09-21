@@ -1,6 +1,6 @@
 # Remove beyondMeetings from Windows.
 #
-#   irm -useb https://raw.githubusercontent.com/nikhilm55/beyondmeetings/main/uninstall.ps1 | iex
+#   irm -useb https://raw.githubusercontent.com/nikhilm55/beyondmeetings/dev/uninstall.ps1 | iex
 #
 # Same contract as uninstall.sh: your meetings are never touched by default.
 # Recordings and transcripts live outside the program directory precisely so
@@ -60,6 +60,25 @@ function Remove-Thing {
 
 Write-Host "beyondMeetings uninstaller"
 Write-Host ""
+
+# An install that came from beyondMeetings-Setup-x64.exe registered its own
+# uninstaller with Windows. Deleting its files from underneath it would leave
+# an entry in Settings > Apps that can never be removed, so hand over instead.
+# Both uninstallers keep the user's recordings, so nothing is lost by it.
+$InnoUninstaller = @(
+    Get-ChildItem -Path $InstallRoot -Filter "unins*.exe" -File `
+        -ErrorAction SilentlyContinue
+)
+if ($InnoUninstaller.Count -gt 0) {
+    Say "This copy was installed by beyondMeetings-Setup-x64.exe, which"
+    Say "registered its own uninstaller. Remove it from"
+    Say "Settings > Apps > Installed apps, or run:"
+    Say ""
+    Say "  & `"$($InnoUninstaller[0].FullName)`""
+    Say ""
+    Say "That uninstaller keeps your meetings, exactly as this script would."
+    exit 0
+}
 
 # Resolve the real paths while Python is still installed. On Windows
 # platformdirs puts the config directory at the SAME path as the data

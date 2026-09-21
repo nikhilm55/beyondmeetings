@@ -48,10 +48,13 @@ def _offenders(path: Path) -> list[str]:
             continue
 
         # os.open takes an int flag and a mode, never an encoding.
+        # tarfile.open returns an archive, and its `encoding` argument names
+        # the charset of the *member names* inside it — passing "utf-8" there
+        # would say something true but unrelated, and the payload is binary.
         if (
             isinstance(func, ast.Attribute)
             and isinstance(func.value, ast.Name)
-            and func.value.id == "os"
+            and func.value.id in {"os", "tarfile"}
         ):
             continue
 
@@ -107,9 +110,20 @@ def test_the_guard_ignores_binary_and_fd_level_calls(tmp_path):
     sample = tmp_path / "sample.py"
     sample.write_text(
         "import os\n"
+        "import tarfile\n"
         "open('x', 'rb')\n"
-        "os.open('x', os.O_RDONLY)\n",
+        "os.open('x', os.O_RDONLY)\n"
+        "tarfile.open('x.tar.gz', 'r:gz')\n",
         encoding="utf-8",
     )
 
     assert not _offenders(sample)
+
+
+def test_the_exemptions_are_scoped_to_those_modules(tmp_path):
+    """`os` and `tarfile` are exempt; a variable that happens to be called
+    something else is not, or the guard could be switched off by renaming."""
+    sample = tmp_path / "sample.py"
+    sample.write_text("zipfile.open('x')\n", encoding="utf-8")
+
+    assert _offenders(sample)

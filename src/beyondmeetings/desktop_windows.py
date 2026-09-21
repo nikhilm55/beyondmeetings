@@ -12,12 +12,14 @@ whatever platform CI happens to be running.
 """
 from __future__ import annotations
 
+import importlib.util
 import os
 import subprocess
 import sys
 from pathlib import Path
 
 APP_NAME = "beyondMeetings"
+ICON = Path(__file__).parent / "assets" / "icon.ico"
 SHORTCUT_NAME = f"{APP_NAME}.lnk"
 DESCRIPTION = "Private meeting recorder and local notes app"
 
@@ -102,6 +104,7 @@ def build_shortcut_script(
     working_dir: Path | None = None,
     description: str = DESCRIPTION,
     window_style: int = 1,
+    icon: Path | None = None,
 ) -> str:
     """The PowerShell that creates one .lnk. Pure, so it is testable anywhere."""
     working_dir = working_dir or target.parent
@@ -117,24 +120,59 @@ def build_shortcut_script(
         f"$link.WorkingDirectory = {_ps_quote(working_dir)}",
         f"$link.Description = {_ps_quote(description)}",
         f"$link.WindowStyle = {int(window_style)}",
-        "$link.Save()",
     ]
+    # Without this the Start Menu shows pythonw.exe's icon, which is the
+    # Python logo — indistinguishable from any other Python tool installed.
+    if icon is not None:
+        lines.append(f"$link.IconLocation = {_ps_quote(icon)}")
+    lines.append("$link.Save()")
     return "; ".join(lines)
+
+
+def have_app_window(find_spec=importlib.util.find_spec) -> bool:
+    """Whether this installation can draw a native window.
+
+    The setup.exe deliberately does not ship pywebview: its app is used in a
+    browser, so the WebView2 runtime it would need is one more thing to fetch
+    on a machine that may not be able to. install.ps1 does ship it.
+    """
+    try:
+        return find_spec("webview") is not None
+    except (ImportError, ValueError):
+        return False
+
+
+def launch_target(windowed: bool | None = None) -> tuple[Path, str]:
+    """What the app icon should start, and with which arguments.
+
+    `beyondmeetings app` opens a native window and needs pywebview. When that
+    is not installed, the icon has to open the browser instead, and it goes
+    through pythonw so no console flashes. `open` rather than `serve` because
+    it is idempotent: clicking the icon twice reuses the running server
+    instead of failing to bind the port.
+    """
+    windowed = have_app_window() if windowed is None else windowed
+    if windowed:
+        return command_path(), "app"
+    return windowless_python(), "-m beyondmeetings open"
 
 
 def install_shortcut(
     home: Path | None = None,
     runner: PowerShellRunner | None = None,
     target: Path | None = None,
+    windowed: bool | None = None,
 ) -> Path:
     """Create the Start Menu entry. Returns where it went."""
     link = shortcut_path(home)
     runner = runner or PowerShellRunner()
+    chosen, arguments = launch_target(windowed)
     runner.run(
         build_shortcut_script(
             link,
-            target or command_path(),
-            arguments="app",
+            target or chosen,
+            arguments=arguments,
+            icon=ICON if ICON.is_file() else None,
         )
     )
     return link
@@ -155,6 +193,7 @@ def install_startup_shortcut(
             arguments="-m beyondmeetings serve --no-browser",
             description=f"{APP_NAME} background service",
             window_style=WINDOW_MINIMIZED,
+            icon=ICON if ICON.is_file() else None,
         )
     )
     return link

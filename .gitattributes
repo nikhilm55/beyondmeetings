@@ -5,3 +5,7 @@
 *.bat text eol=crlf
 *.ps1 text eol=crlf
 *.sh  text eol=lf
+*.iss text eol=crlf
+
+# Never line-ending-normalise the Windows icon: git would corrupt it.
+*.ico binary

@@ -264,6 +264,56 @@ and wrong once the rest of the run is considered.
   `provision_windows.run()` had no timeout, past the point where the
   installer can still report anything.
 
+## Follow-up: one file, no network (2026-09-21)
+
+The bare-machine work above made `install.ps1` self-sufficient: it detects
+and fetches everything a fresh Windows lacks. It did not remove the last
+requirement, which is a working network at install time and a user willing to
+paste a command into PowerShell. `beyondMeetings-Setup-x64.exe` removes both.
+
+The whole dependency tree is resolved on a build agent and shipped inside the
+installer: a relocatable CPython from python-build-standalone, every wheel
+built with *that* interpreter, and ffmpeg through the same URL and the same
+extraction code the application already uses. Installing then makes zero
+network requests, which CI asserts by pointing every proxy variable at a
+closed port before running the installer unattended.
+
+Three decisions are worth recording, because each has a plausible-looking
+alternative that does not work.
+
+**The venv is built on the user's machine, not on the build agent.** pip
+writes the absolute path of the interpreter into every console script it
+generates, so a pre-built environment points `beyondmeetings.exe` at a
+directory that does not exist on the user's disk. `setup-finish.ps1` runs
+`python -m venv` and then `pip install --no-index --find-links` against the
+bundled wheels. That is also what makes the result identical to what
+`install.ps1` produces, so `doctor` and `uninstall.ps1` need no new cases.
+
+**No pywebview, and therefore no WebView2.** The app is used in a browser, so
+a native window would only add a Microsoft runtime to fetch on a machine that
+may not be able to fetch anything. The Start Menu shortcut runs
+`pythonw.exe -m beyondmeetings open`, which is idempotent — a second click
+reuses the running server rather than failing to bind the port — and shows no
+console window. `install_shortcut()` now picks that target automatically when
+pywebview is absent, so `doctor`'s repair does not overwrite it with a
+shortcut to a window that cannot open.
+
+**`{app}` is the `app` subdirectory, never its parent.** `%LOCALAPPDATA%`
+`\beyondMeetings` and `%LOCALAPPDATA%\beyondmeetings` differ only in case,
+which on Windows means they are one directory: the program and every
+recording live in it side by side. An uninstaller aimed one level too high
+deletes the user's meetings. Static tests assert the `DefaultDirName` and
+every `[UninstallDelete]` rule, and the CI job plants a recording before
+uninstalling and fails loudly if it is gone afterwards.
+
+Two smaller things fell out of making the browser route the primary one.
+`resolve_executable()` looked for a file called `beyondmeetings` with no
+extension, which is never a file on Windows, and then fell back to a POSIX
+path — so `beyondmeetings open` could not find the server to launch.
+`launch_server()` relied on `start_new_session`, which subprocess ignores on
+Windows, so the server was a child of a launcher about to exit and flashed a
+console on the way up. Both are now platform-aware and unit-tested on Linux.
+
 ## Known limits
 
 - `FfmpegCheck.fix` on Windows downloads ~100 MB inside a synchronous wizard
@@ -282,3 +332,10 @@ and wrong once the rest of the run is considered.
   symlink, both of which behave differently on Windows.
 - Real capture quality on Windows remains unverified until someone runs
   section 3 of the smoke test.
+- `beyondMeetings-Setup-x64.exe` is unsigned, so SmartScreen shows a warning
+  the first time anyone runs it. Signing needs a code-signing certificate and
+  a secret in CI; until then the smoke test tells testers to expect it.
+- The setup.exe bundles a CPython resolved from the *latest* upstream release
+  at build time rather than a pinned one. That keeps it from rotting, at the
+  cost of two builds of the same commit potentially shipping different patch
+  versions. A lockfile is the right answer if that ever matters.

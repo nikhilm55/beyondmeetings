@@ -96,13 +96,13 @@ long meeting under rate limits.
 **Step 1 — install it.** One command:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/nikhilm55/beyondmeetings/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/nikhilm55/beyondmeetings/dev/install.sh | bash
 ```
 
 Prefer to read the script first? That is reasonable:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/nikhilm55/beyondmeetings/main/install.sh -o install.sh
+curl -fsSL https://raw.githubusercontent.com/nikhilm55/beyondmeetings/dev/install.sh -o install.sh
 less install.sh
 bash install.sh
 ```
@@ -111,7 +111,7 @@ If `raw.githubusercontent.com` is blocked on your network (`curl: (35)
 Connection reset by peer`), the same file is served by a mirror:
 
 ```bash
-curl -fsSL https://cdn.jsdelivr.net/gh/nikhilm55/beyondmeetings@main/install.sh | bash
+curl -fsSL https://cdn.jsdelivr.net/gh/nikhilm55/beyondmeetings@dev/install.sh | bash
 ```
 
 It checks your system, installs into `~/.local/share/beyondmeetings-app`, adds
@@ -161,7 +161,7 @@ The installer warns you if this applies.
 ### Updating
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/nikhilm55/beyondmeetings/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/nikhilm55/beyondmeetings/dev/install.sh | bash
 ```
 
 Same command. Your settings, keys and recordings are left alone.
@@ -291,7 +291,7 @@ Run `beyondmeetings doctor` at any time to see what is missing.
 |---|---|---|
 | **Linux** | PipeWire null sink | Supported and in daily use |
 | **macOS 13+** | ScreenCaptureKit + AVFoundation | Implemented, **not yet verified on hardware** |
-| **Windows 10+/11** | WASAPI loopback + microphone | One-line install; suite runs on Windows in CI; **capture not yet verified on hardware** |
+| **Windows 10+/11** | WASAPI loopback + microphone | Offline `setup.exe` (64-bit) or one-line install; suite runs on Windows in CI; **capture not yet verified on hardware** |
 
 Everything above the capture layer — transcription, analysis, notes, task
 board, dashboard — is shared, so a new platform is one backend and its
@@ -299,10 +299,54 @@ packaging, not a fork.
 
 ### Windows
 
-One line in PowerShell — no download, no execution-policy change:
+#### The installer (recommended)
+
+Download **`beyondMeetings-Setup-x64.exe`** from
+[Releases](https://github.com/nikhilm55/beyondmeetings/releases) and
+double-click it. That is the whole procedure. There is nothing to install
+first — no Python, no git, no curl, no package manager — and no administrator
+password, because everything lands in your own `%LOCALAPPDATA%`.
+
+It also needs no internet connection. The interpreter, every dependency and
+ffmpeg are all *inside* the file, so it installs the same way on a locked-down
+laptop behind a proxy as on an open network. Expect around 200 MB to download
+once and about a minute of setup.
+
+64-bit Windows 10 or later. It runs on ARM64 Windows too, through the x64
+emulation those machines ship with.
+
+The app itself opens in your browser at `http://127.0.0.1:7788` — the Start
+Menu shortcut starts it if it is not already running and brings up the page
+either way. Uninstall it from **Settings → Apps → Installed apps** like any
+other program; your recordings and notes are kept.
+
+<details>
+<summary>What the installer puts where</summary>
+
+| Path | What |
+|---|---|
+| `%LOCALAPPDATA%\beyondMeetings\app\` | The bundled CPython and the virtual environment |
+| `%LOCALAPPDATA%\beyondMeetings\bin\` | `ffmpeg.exe`, `ffprobe.exe` and a `beyondmeetings.cmd` shim |
+| `%LOCALAPPDATA%\beyondmeetings\` | Your recordings, transcripts, notes and settings |
+
+Those last two are the same directory under two spellings, because Windows
+paths are case-insensitive. That is exactly why the program installs into an
+`app` subdirectory and why the uninstaller removes only that — see
+[`installer/windows/`](installer/windows/) for the rest of the reasoning.
+
+No `PATH` entry is added. If you want `beyondmeetings` in a terminal, call
+`%LOCALAPPDATA%\beyondMeetings\bin\beyondmeetings.cmd`, or add that folder
+to your `PATH` yourself.
+
+</details>
+
+#### The one-liner
+
+Prefer a script you can read, or want the native desktop window rather than a
+browser tab? One line in PowerShell — no download, no execution-policy change:
 
 ```powershell
-irm -useb https://raw.githubusercontent.com/nikhilm55/beyondmeetings/main/install.ps1 | iex
+irm -useb https://raw.githubusercontent.com/nikhilm55/beyondmeetings/dev/install.ps1 | iex
 ```
 
 Piping to `iex` never writes a `.ps1` to disk, and PowerShell's execution
@@ -311,7 +355,7 @@ policy only governs script *files*, so `Set-ExecutionPolicy` is not needed.
 Prefer to read it first? That is reasonable:
 
 ```powershell
-irm -useb https://raw.githubusercontent.com/nikhilm55/beyondmeetings/main/install.ps1 -OutFile install.ps1
+irm -useb https://raw.githubusercontent.com/nikhilm55/beyondmeetings/dev/install.ps1 -OutFile install.ps1
 notepad install.ps1
 & ([scriptblock]::Create((Get-Content -Raw .\install.ps1)))
 ```
@@ -331,7 +375,7 @@ connection was closed: An unexpected error occurred on a send`. The same
 mirror the Linux instructions use serves the PowerShell installer:
 
 ```powershell
-irm -useb https://cdn.jsdelivr.net/gh/nikhilm55/beyondmeetings@main/install.ps1 | iex
+irm -useb https://cdn.jsdelivr.net/gh/nikhilm55/beyondmeetings@dev/install.ps1 | iex
 ```
 
 If the mirror is unreachable too, download and run instead. Nothing is
@@ -396,7 +440,7 @@ build inside WSL anyway (say, to record audio playing inside WSL itself), set
 To remove it:
 
 ```powershell
-irm -useb https://raw.githubusercontent.com/nikhilm55/beyondmeetings/main/uninstall.ps1 | iex
+irm -useb https://raw.githubusercontent.com/nikhilm55/beyondmeetings/dev/uninstall.ps1 | iex
 ```
 
 Recordings, transcripts and stored API keys are kept unless you pass
@@ -453,7 +497,7 @@ xcode-select --install
 Then the same one-liner as Linux:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/nikhilm55/beyondmeetings/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/nikhilm55/beyondmeetings/dev/install.sh | bash
 ```
 
 It installs into `~/.local/share/beyondmeetings-app`, compiles `bmcapture`,
@@ -651,7 +695,7 @@ On Windows, `uninstall.ps1` has the same contract and the same three switches
 (`-DryRun`, `-PurgeKeys`, `-PurgeData`):
 
 ```powershell
-irm -useb https://raw.githubusercontent.com/nikhilm55/beyondmeetings/main/uninstall.ps1 | iex
+irm -useb https://raw.githubusercontent.com/nikhilm55/beyondmeetings/dev/uninstall.ps1 | iex
 ```
 
 The program is deliberately installed to a *different* directory from your
