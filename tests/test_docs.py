@@ -1,3 +1,4 @@
+import re
 import pytest
 import sys
 from pathlib import Path
@@ -91,3 +92,37 @@ def test_readme_documents_the_app_icon():
     text = (ROOT / "README.md").read_text(encoding="utf-8")
     assert "beyondmeetings open" in text
     assert "icon in your applications" in text
+
+
+# --- the install commands have to point at a branch that exists -------------
+
+INSTALL_DOCS = (
+    "README.md", "docs/windows-smoke-test.md",
+    "install.ps1", "install.sh", "uninstall.ps1", "uninstall.sh",
+    "install.cmd", "uninstall.cmd",
+)
+BRANCH_URL = re.compile(
+    r"raw\.githubusercontent\.com/nikhilm55/beyondmeetings/([^/\s]+)/"
+    r"|cdn\.jsdelivr\.net/gh/nikhilm55/beyondmeetings@([^/\s]+)/"
+)
+
+
+def _documented_refs() -> dict[str, set[str]]:
+    found: dict[str, set[str]] = {}
+    for name in INSTALL_DOCS:
+        path = ROOT / name
+        if not path.is_file():
+            continue
+        for raw, jsdelivr in BRANCH_URL.findall(path.read_text(encoding="utf-8")):
+            found.setdefault(raw or jsdelivr, set()).add(name)
+    return found
+
+
+def test_every_documented_install_url_names_the_same_branch():
+    """They drifted: the README told users to run install.ps1 from `main`
+    while the default branch — and every fix — was on `dev`, so the command
+    in the README fetched an installer that was two releases behind."""
+    refs = _documented_refs()
+
+    assert refs, "no install URL is documented anywhere"
+    assert len(refs) == 1, {ref: sorted(where) for ref, where in refs.items()}

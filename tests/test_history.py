@@ -32,9 +32,13 @@ def test_lists_a_meeting_with_its_metadata(tmp_path):
 def test_reads_the_recording_time_when_available(tmp_path):
     _note(tmp_path, "2026-07-30", "Standup")
     path = tmp_path / "Meetings" / "2026-07-30" / "Standup.md"
-    path.write_text(path.read_text(encoding="utf-8").replace(
-        "date: 2026-07-30", "date: 2026-07-30\nrecorded_at: 2026-07-30T14:30:00"
-    ))
+    path.write_text(
+        path.read_text(encoding="utf-8").replace(
+            "date: 2026-07-30",
+            "date: 2026-07-30\nrecorded_at: 2026-07-30T14:30:00",
+        ),
+        encoding="utf-8",
+    )
     assert list_meetings(tmp_path)[0]["recorded_at"] == "2026-07-30T14:30:00"
 
 

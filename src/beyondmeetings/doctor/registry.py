@@ -55,9 +55,9 @@ def build_checks(
             MicrophonePermissionCheck(),
         ]
     elif windows:
-        from .windows import WindowsAudioCheck
+        from .windows import WebView2Check, WindowsAudioCheck
 
-        checks.append(WindowsAudioCheck())
+        checks += [WindowsAudioCheck(), WebView2Check()]
     else:
         checks.append(PipeWireCheck())
 

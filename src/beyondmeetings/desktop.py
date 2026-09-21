@@ -17,6 +17,8 @@ import time
 import webbrowser
 from pathlib import Path
 
+from .tools import which_tool
+
 DEFAULT_PORT = 7788
 APP_ID = "beyondmeetings"
 STARTUP_TIMEOUT = 20.0
@@ -54,13 +56,37 @@ def icon_install_path(home: Path | None = None) -> Path:
     )
 
 
-def resolve_executable() -> str:
+def resolve_executable(platform: str | None = None) -> str:
     """Absolute path to the beyondmeetings command.
 
     A .desktop file is launched by the session, which often does not have
     ~/.local/bin on PATH — so the path is baked in at install time rather than
-    relying on the name resolving.
+    relying on the name resolving. The Windows counterpart is the Start Menu
+    shortcut, launched by Explorer with whatever PATH the user's profile has.
+
+    On Windows the console script is `beyondmeetings.exe`, so the bare name
+    never matched as a file and the last resort was a POSIX path that cannot
+    exist there. `which_tool` already knows to look beside the interpreter and
+    in the application's own bin directory, which is exactly where both
+    installers put it.
     """
+    platform = platform if platform is not None else sys.platform
+
+    if platform == "win32":
+        # The sibling .exe is checked before PATH on purpose. The bin
+        # directory both Windows installers create holds a *.cmd* shim, and
+        # subprocess goes through CreateProcess, which cannot launch a batch
+        # file — so a PATH hit there would be worse than no hit at all.
+        beside = Path(sys.executable).parent / f"{APP_ID}.exe"
+        if beside.is_file():
+            return str(beside)
+        found = which_tool(APP_ID, platform=platform)
+        if found and found.lower().endswith(".exe"):
+            return found
+        # Absolute either way: the venv's Scripts directory is where pip put
+        # the console script, whether or not this interpreter can see it.
+        return str(beside)
+
     found = shutil.which(APP_ID)
     if found:
         return found
@@ -70,6 +96,20 @@ def resolve_executable() -> str:
         return str(beside)
 
     return str(Path.home() / ".local" / "bin" / APP_ID)
+
+
+def server_log_dir(platform: str | None = None) -> Path:
+    """Where the detached server's output goes.
+
+    Windows has no ~/.local/share, and the message pointing a user at the log
+    has to name a path that exists on their machine.
+    """
+    platform = platform if platform is not None else sys.platform
+    if platform == "win32":
+        local = os.environ.get("LOCALAPPDATA")
+        base = Path(local) if local else Path.home() / "AppData" / "Local"
+        return base / APP_ID / "logs"
+    return Path.home() / ".local" / "share" / APP_ID
 
 
 def server_is_running(port: int = DEFAULT_PORT) -> bool:
@@ -183,18 +223,36 @@ def open_browser_when_ready(
     return thread
 
 
+def detach_flags(platform: str | None = None) -> int:
+    """CreateProcess flags that make a child outlive us, and show no console.
+
+    `start_new_session` is a POSIX-only setting — subprocess ignores it on
+    Windows — so without these the server was a child of a launcher that was
+    about to exit, and it flashed a console window on the way up.
+    """
+    platform = platform if platform is not None else sys.platform
+    if platform != "win32":
+        return 0
+    return (
+        getattr(subprocess, "DETACHED_PROCESS", 0)
+        | getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
+        | getattr(subprocess, "CREATE_NO_WINDOW", 0)
+    )
+
+
 def launch_server(port: int = DEFAULT_PORT, log_dir: Path | None = None) -> int:
     """Start the server detached, so it outlives the launcher process."""
-    log_dir = Path(log_dir or Path.home() / ".local" / "share" / APP_ID)
+    log_dir = Path(log_dir or server_log_dir())
     log_dir.mkdir(parents=True, exist_ok=True)
-    log = (log_dir / "server.log").open("a")
+    log = (log_dir / "server.log").open("a", encoding="utf-8")
 
     process = subprocess.Popen(
         [resolve_executable(), "serve", "--no-browser", "--port", str(port)],
         stdout=log,
         stderr=subprocess.STDOUT,
         stdin=subprocess.DEVNULL,
-        start_new_session=True,  # survives the launcher exiting
+        start_new_session=True,  # survives the launcher exiting (POSIX)
+        creationflags=detach_flags(),  # the same thing on Windows
     )
     return process.pid
 
@@ -217,10 +275,46 @@ def open_app(
         raise RuntimeError(
             f"The server did not come up on port {port} within "
             f"{int(STARTUP_TIMEOUT)}s. Check "
-            f"~/.local/share/{APP_ID}/server.log"
+            f"{server_log_dir() / 'server.log'}"
         )
     opener(url)
     return "started"
+
+
+def report_headless(
+    message: str,
+    title: str = "beyondMeetings",
+    platform: str | None = None,
+    box=None,
+) -> bool:
+    """Show a message box when there is no console to print to.
+
+    The Windows app icon runs `pythonw.exe -m beyondmeetings open`, and
+    pythonw has no stdout or stderr at all. Without this, every way that
+    launch can fail — the port taken by something else, a half-built
+    environment — looks identical to the user: they double-click the icon and
+    nothing whatsoever happens.
+
+    False means nothing was shown, and the caller's ordinary error path still
+    applies. Nothing here is allowed to raise: it runs while reporting a
+    failure, and a failure to report a failure helps nobody.
+    """
+    platform = platform if platform is not None else sys.platform
+    if platform != "win32" or sys.stdout is not None:
+        return False
+
+    if box is None:
+        try:
+            import ctypes
+
+            box = ctypes.windll.user32.MessageBoxW
+        except (ImportError, AttributeError, OSError):
+            return False
+    try:
+        box(None, message, title, 0x10)  # MB_OK | MB_ICONERROR
+    except Exception:
+        return False
+    return True
 
 
 def install_desktop_entry(home: Path | None = None) -> Path:

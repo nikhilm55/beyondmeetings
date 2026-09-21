@@ -1,3 +1,5 @@
+from datetime import date, timedelta
+
 from beyondmeetings.config import Config
 from beyondmeetings.models import ActionItem, MeetingNote
 from beyondmeetings.pipeline import generate_notes
@@ -36,9 +38,9 @@ def _setup(tmp_path, note):
     return cfg, StubProvider(note)
 
 
-def _with_previous(tmp_path, note):
+def _with_previous(tmp_path, note, when="2026-07-29"):
     scaffold_vault(tmp_path)
-    prev_dir = tmp_path / "Meetings" / "2026-07-29"
+    prev_dir = tmp_path / "Meetings" / when
     prev_dir.mkdir(parents=True, exist_ok=True)
     (prev_dir / "Design QA Review.md").write_text(PREV_NOTE, encoding="utf-8")
     return Config(vault_path=str(tmp_path)), StubProvider(note)
@@ -102,9 +104,12 @@ def test_follow_up_marker_appears_in_home(tmp_path):
 
 
 def test_candidates_are_passed_to_the_prompt(tmp_path):
-    cfg, provider = _with_previous(tmp_path, _note())
+    """Relative to today, not a fixed date: gather_candidates only looks back
+    30 days, so a hardcoded 2026-07-29 silently stopped being a candidate."""
+    recent = (date.today() - timedelta(days=1)).isoformat()
+    cfg, provider = _with_previous(tmp_path, _note(), when=recent)
     generate_notes("transcript text", cfg, provider)
-    assert "2026-07-29/Design QA Review" in provider.prompts[0]
+    assert f"{recent}/Design QA Review" in provider.prompts[0]
 
 
 def test_returns_the_written_note_path(tmp_path):

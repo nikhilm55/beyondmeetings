@@ -6,6 +6,7 @@ one was invisible to the wizard and unfixable without reinstalling.
 """
 from beyondmeetings.desktop_windows import shortcut_path, startup_shortcut_path
 from beyondmeetings.doctor import windows as win
+from beyondmeetings.provision_windows import Outcome
 
 
 def test_the_launcher_row_is_missing_until_a_shortcut_exists(tmp_path):
@@ -65,3 +66,67 @@ def test_neither_row_is_required_so_a_refusal_cannot_block_setup(tmp_path):
     assert win.StartMenuShortcutCheck(home=tmp_path).required is False
     assert win.WindowsAutostartCheck(home=tmp_path).required is False
     assert win.WindowsAudioCheck().required is True
+
+
+# --- the WebView2 runtime row -----------------------------------------------
+#
+# This had no test of its own, which is how fix() came to report failure after
+# a successful install: the bootstrapper exits 0 while the runtime is still
+# being laid down, so detect() alone is the wrong answer to "did the fix work".
+
+def test_webview2_is_ok_when_the_runtime_is_registered(monkeypatch):
+    monkeypatch.setattr(
+        "beyondmeetings.doctor.windows.registry_version", lambda: "121.0.2277.128"
+    )
+    result = win.WebView2Check().detect()
+
+    assert result.status == "ok"
+    assert "121.0.2277.128" in result.detail
+
+
+def test_webview2_missing_points_at_the_browser_fallback(monkeypatch):
+    monkeypatch.setattr("beyondmeetings.doctor.windows.registry_version", lambda: None)
+    result = win.WebView2Check().detect()
+
+    assert result.status == "missing"
+    assert "127.0.0.1:7788" in result.detail
+
+
+def test_webview2_is_not_required_because_a_browser_works(monkeypatch):
+    assert win.WebView2Check().required is False
+    assert win.WebView2Check().fixable is True
+
+
+def test_webview2_fix_does_not_call_a_working_install_a_failure(monkeypatch):
+    """The bootstrapper returns before the registry catches up."""
+    monkeypatch.setattr(
+        "beyondmeetings.doctor.windows.ensure_webview2",
+        lambda: Outcome("WebView2 runtime", "installed", "installed"),
+    )
+    monkeypatch.setattr("beyondmeetings.doctor.windows.registry_version", lambda: None)
+
+    result = win.WebView2Check().fix()
+
+    assert result.status == "ok"
+    assert "restart" in result.detail.lower()
+
+
+def test_webview2_fix_reports_a_real_failure(monkeypatch):
+    monkeypatch.setattr(
+        "beyondmeetings.doctor.windows.ensure_webview2",
+        lambda: Outcome("WebView2 runtime", "failed", "no network"),
+    )
+    result = win.WebView2Check().fix()
+
+    assert result.status == "missing"
+    assert "no network" in result.detail
+
+
+def test_webview2_fix_reports_the_version_once_the_registry_has_it(monkeypatch):
+    monkeypatch.setattr(
+        "beyondmeetings.doctor.windows.ensure_webview2",
+        lambda: Outcome("WebView2 runtime", "installed", "121.0"),
+    )
+    monkeypatch.setattr("beyondmeetings.doctor.windows.registry_version", lambda: "121.0")
+
+    assert win.WebView2Check().fix().status == "ok"

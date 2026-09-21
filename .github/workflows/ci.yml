@@ -84,3 +84,63 @@ jobs:
         if: runner.os == 'Windows'
         shell: pwsh
         run: ./uninstall.ps1 -DryRun
+
+      # The bug this guards: `pip install ... @ git+<url>` shells out to git,
+      # so the installer worked on every developer machine and every runner
+      # and failed on a freshly imaged Windows, which has no git. Hiding git
+      # is the only way to notice that from CI.
+      - name: install.ps1 installs end to end with no git on PATH
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $env:Path = ($env:Path -split ';' |
+              Where-Object { $_ -and $_ -notmatch '[\\/]Git[\\/]' }) -join ';'
+          if (Get-Command git -ErrorAction SilentlyContinue) {
+              throw "git is still reachable; this step proves nothing"
+          }
+          ./install.ps1 -NoLaunch
+          if ($LASTEXITCODE -ne 0) { throw "installer exited $LASTEXITCODE" }
+
+      - name: the installed command runs
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $shim = Join-Path $env:LOCALAPPDATA "beyondMeetings\bin\beyondmeetings.cmd"
+          if (-not (Test-Path $shim)) { throw "no shim at $shim" }
+          & $shim --help
+          if ($LASTEXITCODE -ne 0) { throw "the installed command exited $LASTEXITCODE" }
+
+      # The log doubles as the record of what the installer actually did, so
+      # the source-resolution assertion is made against it. Reading it is the
+      # only way: the installer reports through Write-Host, which never
+      # reaches the pipeline, so capturing its output with Tee-Object matches
+      # nothing (it did exactly that, and failed a passing install).
+      - name: the run is logged, and records a git-free source
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $log = Join-Path $env:TEMP "beyondmeetings-install.log"
+          if (-not (Test-Path $log)) { throw "no install log at $log" }
+          $text = Get-Content $log -Raw
+          Write-Host $text
+
+          # Trusting PATH to stay stripped is not enough on its own: the
+          # installer refreshes PATH from the registry after provisioning and
+          # the runner's machine PATH carries Git. This says pip was handed a
+          # directory, which is the thing git was needed for.
+          if ($text -notmatch 'Installing from this checkout') {
+              throw "the installer did not record a git-free source"
+          }
+          # ...and that the commands it shells out to reach the log at all,
+          # which is what every failure message promises.
+          if ($text -notmatch 'pip.*install') {
+              throw "the log does not carry the commands that were run"
+          }
+
+      - name: uninstall removes what install added
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          ./uninstall.ps1
+          $app = Join-Path $env:LOCALAPPDATA "beyondMeetings\app"
+          if (Test-Path $app) { throw "$app survived the uninstall" }

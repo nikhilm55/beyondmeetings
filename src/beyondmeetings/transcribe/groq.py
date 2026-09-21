@@ -8,14 +8,15 @@ of transcribing it.
 from __future__ import annotations
 
 import re
-import shutil
 import subprocess
+import sys
 import tempfile
 import time
 from pathlib import Path
 
 import httpx
 
+from ..tools import which_tool
 from .base import Transcriber
 
 API_URL = "https://api.groq.com/openai/v1/audio/transcriptions"
@@ -45,12 +46,19 @@ def parse_retry_after(value: str | None) -> float:
 
 
 def resolve_ffmpeg() -> str:
-    found = shutil.which("ffmpeg")
+    # which_tool, not shutil.which: on Windows the installer fetches ffmpeg
+    # into the application's own bin directory instead of editing the user's
+    # PATH, so PATH alone would miss it. Off Windows the two are identical.
+    found = which_tool("ffmpeg")
     if not found:
-        raise FileNotFoundError(
-            "ffmpeg not found on PATH. Install it with your package manager "
+        hint = (
+            "Install it with: winget install Gyan.FFmpeg, or run "
+            "'beyondmeetings doctor' to fetch it."
+            if sys.platform == "win32"
+            else "Install it with your package manager "
             "(apt install ffmpeg / dnf install ffmpeg / pacman -S ffmpeg)."
         )
+        raise FileNotFoundError(f"ffmpeg not found. {hint}")
     return found
 
 

@@ -50,7 +50,7 @@ def _transcriber(tmp_path, calls, language="auto"):
     def runner(args):
         calls.append(args)
         out = args[args.index("--output-file") + 1]
-        with open(f"{out}.txt", "w") as fh:
+        with open(f"{out}.txt", "w", encoding="utf-8") as fh:
             fh.write("the transcript")
         return 0
 

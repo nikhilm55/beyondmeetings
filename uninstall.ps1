@@ -1,6 +1,6 @@
 # Remove beyondMeetings from Windows.
 #
-#   irm -useb https://raw.githubusercontent.com/nikhilm55/beyondmeetings/main/uninstall.ps1 | iex
+#   irm -useb https://raw.githubusercontent.com/nikhilm55/beyondmeetings/dev/uninstall.ps1 | iex
 #
 # Same contract as uninstall.sh: your meetings are never touched by default.
 # Recordings and transcripts live outside the program directory precisely so
@@ -17,15 +17,24 @@ param(
 
 $ErrorActionPreference = "Stop"
 
+# Same fallback as install.ps1. Without it, a session with no LOCALAPPDATA
+# dies on Join-Path under "Stop" and the program becomes unremovable by its
+# own uninstaller — in exactly the session where install.ps1 now succeeds.
+$LocalAppData = if ($env:LOCALAPPDATA) {
+    $env:LOCALAPPDATA
+} else {
+    Join-Path $env:USERPROFILE "AppData\Local"
+}
+
 $InstallRoot = if ($env:BEYONDMEETINGS_HOME) {
     $env:BEYONDMEETINGS_HOME
 } else {
-    Join-Path $env:LOCALAPPDATA "beyondMeetings\app"
+    Join-Path $LocalAppData "beyondMeetings\app"
 }
 $BinDir = if ($env:BEYONDMEETINGS_BIN) {
     $env:BEYONDMEETINGS_BIN
 } else {
-    Join-Path $env:LOCALAPPDATA "beyondMeetings\bin"
+    Join-Path $LocalAppData "beyondMeetings\bin"
 }
 
 $Venv = Join-Path $InstallRoot "venv"
@@ -51,6 +60,25 @@ function Remove-Thing {
 
 Write-Host "beyondMeetings uninstaller"
 Write-Host ""
+
+# An install that came from beyondMeetings-Setup-x64.exe registered its own
+# uninstaller with Windows. Deleting its files from underneath it would leave
+# an entry in Settings > Apps that can never be removed, so hand over instead.
+# Both uninstallers keep the user's recordings, so nothing is lost by it.
+$InnoUninstaller = @(
+    Get-ChildItem -Path $InstallRoot -Filter "unins*.exe" -File `
+        -ErrorAction SilentlyContinue
+)
+if ($InnoUninstaller.Count -gt 0) {
+    Say "This copy was installed by beyondMeetings-Setup-x64.exe, which"
+    Say "registered its own uninstaller. Remove it from"
+    Say "Settings > Apps > Installed apps, or run:"
+    Say ""
+    Say "  & `"$($InnoUninstaller[0].FullName)`""
+    Say ""
+    Say "That uninstaller keeps your meetings, exactly as this script would."
+    exit 0
+}
 
 # Resolve the real paths while Python is still installed. On Windows
 # platformdirs puts the config directory at the SAME path as the data
@@ -81,9 +109,9 @@ print(startup_shortcut_path())
 
 # Fallbacks for a half-removed install where Python is already gone.
 if (-not $ConfigFile) {
-    $ConfigFile = Join-Path $env:LOCALAPPDATA "beyondmeetings\config.toml"
+    $ConfigFile = Join-Path $LocalAppData "beyondmeetings\config.toml"
 }
-if (-not $DataDir) { $DataDir = Join-Path $env:LOCALAPPDATA "beyondmeetings" }
+if (-not $DataDir) { $DataDir = Join-Path $LocalAppData "beyondmeetings" }
 if (-not $StartMenu) {
     $StartMenu = Join-Path $env:APPDATA `
         "Microsoft\Windows\Start Menu\Programs\beyondMeetings.lnk"
@@ -130,6 +158,18 @@ Remove-Thing $StartMenu   "Start Menu shortcut"
 # BEYONDMEETINGS_BIN, so this can be a shared bin folder holding unrelated
 # executables. uninstall.sh removes a single symlink for the same reason.
 Remove-Thing $Shim "command shim"
+
+# ffmpeg, only when it is in the directory we chose ourselves. With
+# BEYONDMEETINGS_BIN pointing at a shared bin folder, an ffmpeg.exe there is
+# far more likely to be the user's own than the one install.ps1 fetched.
+if (-not $env:BEYONDMEETINGS_BIN) {
+    foreach ($tool in @("ffmpeg.exe", "ffprobe.exe")) {
+        $path = Join-Path $BinDir $tool
+        if (Test-Path -LiteralPath $path) {
+            Remove-Thing $path "bundled $tool"
+        }
+    }
+}
 if ((Test-Path -LiteralPath $BinDir) -and
     -not (Get-ChildItem -LiteralPath $BinDir -Force -ErrorAction SilentlyContinue)) {
     if ($DryRun) {
@@ -152,3 +192,10 @@ if ($PurgeData) {
 
 Write-Host ""
 Say "Done. Your notes library was not touched."
+
+# `& $Command stop` above exits non-zero when nothing is recording, which is
+# the normal case, and PowerShell keeps that in $LASTEXITCODE to the end of
+# the script. uninstall.cmd then announced "Uninstall failed with exit code 1"
+# after an uninstall that had removed everything it was asked to. Removals here
+# are all -ErrorAction SilentlyContinue, so there is no failure to report.
+exit 0

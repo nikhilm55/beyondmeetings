@@ -1,0 +1,212 @@
+# Builds beyondMeetings-Setup-x64.exe: one file that installs the whole
+# application onto a Windows machine with nothing on it.
+#
+# It is a separate workflow from ci.yml because it is slow — it downloads an
+# interpreter, builds every wheel and then LZMA-compresses ~300 MB — and
+# because its interesting assertions are not unit tests. They are: the
+# installer runs unattended, it installs with the network unreachable, the
+# result works, and uninstalling it does not take the user's recordings with
+# it.
+name: Windows installer
+
+on:
+  push:
+    branches: [main, dev, "fix/**", "feat/**"]
+  pull_request:
+  workflow_dispatch:
+  release:
+    types: [published]
+
+permissions:
+  contents: write
+
+# A push to a PR branch fires this twice, once per event. The job downloads
+# an interpreter and compresses 300 MB, and the two copies raced each other
+# into GitHub's anonymous API rate limit, so the second one is cancelled.
+concurrency:
+  group: windows-installer-${{ github.head_ref || github.ref_name }}
+  cancel-in-progress: true
+
+jobs:
+  setup-exe:
+    name: setup.exe
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Only to *run* build_payload.py. The interpreter that gets shipped is
+      # the one that script downloads, and the wheels are built with that one.
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      # The token is only for the release lookup that picks a CPython build.
+      # Anonymous GitHub API calls are limited per IP, and runners share them.
+      - name: Assemble the payload
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: python installer/windows/build_payload.py --out build/windows/payload
+
+      - name: The payload holds what the installer promises
+        shell: pwsh
+        run: |
+          $payload = "build/windows/payload"
+          foreach ($needed in "runtime/python.exe", "bin/ffmpeg.exe",
+                              "bin/ffprobe.exe", "bin/ffmpeg-LICENSE.txt") {
+              if (-not (Test-Path (Join-Path $payload $needed))) {
+                  throw "the payload has no $needed"
+              }
+          }
+          $wheels = Get-ChildItem (Join-Path $payload "wheels") -Filter *.whl
+          if ($wheels.Count -lt 5) { throw "only $($wheels.Count) wheels — pip resolved nothing" }
+          if (-not ($wheels.Name -match '^beyondmeetings-')) {
+              throw "the application's own wheel is missing"
+          }
+          Write-Host "$($wheels.Count) wheels, runtime and ffmpeg present"
+
+      - name: Install Inno Setup
+        run: choco install innosetup -y --no-progress
+
+      - name: Compile the installer
+        shell: pwsh
+        run: |
+          $iscc = "C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
+          if (-not (Test-Path $iscc)) { throw "no ISCC at $iscc" }
+          $version = (Select-String -Path pyproject.toml -Pattern '^version = "(.+)"' |
+              Select-Object -First 1).Matches[0].Groups[1].Value
+          if (-not $version) { throw "no version in pyproject.toml" }
+          Write-Host "building $version"
+          & $iscc /Qp `
+              "/DAppVersion=$version" `
+              "/DPayload=$PWD\build\windows\payload" `
+              "/O$PWD\dist" `
+              installer\windows\beyondmeetings.iss
+          if ($LASTEXITCODE -ne 0) { throw "ISCC exited $LASTEXITCODE" }
+          Get-ChildItem dist | Format-Table Name, @{n='MB';e={[int]($_.Length/1MB)}}
+
+      # The claim this whole workflow exists to defend: the user needs nothing
+      # but the file. Pointing every proxy variable at a closed port means any
+      # attempt to reach the network during the install fails immediately and
+      # loudly, rather than succeeding on a runner that happens to have
+      # pypi.org one hop away.
+      - name: Install unattended, with the network unreachable
+        shell: pwsh
+        env:
+          HTTP_PROXY: http://127.0.0.1:9
+          HTTPS_PROXY: http://127.0.0.1:9
+          PIP_INDEX_URL: http://127.0.0.1:9/simple
+        run: |
+          $setup = (Get-Item dist\beyondMeetings-Setup-x64.exe).FullName
+          $log = "$PWD\inno-install.log"
+          $run = Start-Process -FilePath $setup -Wait -PassThru -ArgumentList `
+              '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', "/LOG=$log"
+          Write-Host "setup exited $($run.ExitCode)"
+          if (Test-Path "$env:TEMP\beyondmeetings-setup.log") {
+              Write-Host "--- setup-finish.ps1 ---"
+              Get-Content "$env:TEMP\beyondmeetings-setup.log"
+          }
+          if ($run.ExitCode -ne 0) {
+              if (Test-Path $log) { Get-Content $log }
+              throw "the installer exited $($run.ExitCode)"
+          }
+
+      - name: The installed application works
+        shell: pwsh
+        run: |
+          $root = Join-Path $env:LOCALAPPDATA "beyondMeetings"
+          $shim = Join-Path $root "bin\beyondmeetings.cmd"
+          if (-not (Test-Path $shim)) { throw "no command shim at $shim" }
+          & $shim --help
+          if ($LASTEXITCODE -ne 0) { throw "the installed command exited $LASTEXITCODE" }
+
+          # doctor exits 1 until an API key is configured, which a fresh
+          # runner has none of. What matters is that it prints rows.
+          $rows = & $shim doctor 2>&1 | Out-String
+          Write-Host $rows
+          if ($rows -match 'Traceback') { throw "doctor crashed" }
+          if ($rows -notmatch 'ffmpeg') { throw "doctor printed no ffmpeg row" }
+
+          # ffmpeg has to be found without a PATH edit — the application looks
+          # in its own bin directory. This asserts the binary is really there
+          # and really runs, which a `which` would not.
+          #
+          # Captured, not piped into Select-Object: an upstream `-First` stops
+          # the pipeline, PowerShell kills the native command, and
+          # $LASTEXITCODE reports a failure for output it simply stopped
+          # reading. ffmpeg printed its banner perfectly and this threw.
+          $banner = & (Join-Path $root "bin\ffmpeg.exe") -version 2>&1
+          if ($LASTEXITCODE -ne 0) { throw "the bundled ffmpeg does not run" }
+          Write-Host ($banner | Select-Object -First 1)
+
+          if (-not (Test-Path (Join-Path $root "app\venv\Scripts\beyondmeetings.exe"))) {
+              throw "no console script — setup-finish.ps1 did not complete"
+          }
+          # ~100 MB the user should not be left carrying.
+          if (Test-Path (Join-Path $root "app\wheels")) {
+              throw "the bundled wheels were not reclaimed"
+          }
+
+      - name: The Start Menu entry points at something that exists
+        shell: pwsh
+        run: |
+          $link = Join-Path $env:APPDATA `
+              "Microsoft\Windows\Start Menu\Programs\beyondMeetings.lnk"
+          if (-not (Test-Path $link)) { throw "no Start Menu shortcut at $link" }
+          $shell = New-Object -ComObject WScript.Shell
+          $shortcut = $shell.CreateShortcut($link)
+          Write-Host "target: $($shortcut.TargetPath) $($shortcut.Arguments)"
+          if (-not (Test-Path $shortcut.TargetPath)) {
+              throw "the shortcut targets $($shortcut.TargetPath), which does not exist"
+          }
+
+      # The hazard this guards is specific and easy to reintroduce:
+      # %LOCALAPPDATA%\beyondMeetings and %LOCALAPPDATA%\beyondmeetings are the
+      # same directory on Windows, so an uninstaller aimed one level too high
+      # deletes every meeting the user ever recorded.
+      - name: Uninstalling keeps the user's meetings
+        shell: pwsh
+        run: |
+          $root = Join-Path $env:LOCALAPPDATA "beyondMeetings"
+          $recordings = Join-Path $root "recordings\2026-09-21"
+          New-Item -ItemType Directory -Force -Path $recordings | Out-Null
+          Set-Content -Path (Join-Path $recordings "keep-me.wav") -Value "audio"
+
+          $uninstaller = Get-ChildItem (Join-Path $root "app") -Filter "unins*.exe" |
+              Select-Object -First 1
+          if (-not $uninstaller) { throw "no uninstaller was registered" }
+          $log = "$PWD\inno-uninstall.log"
+          $run = Start-Process -FilePath $uninstaller.FullName -Wait -PassThru `
+              -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', "/LOG=$log"
+
+          # unins000.exe copies itself to %TEMP% and re-launches from there, so
+          # the process Start-Process waited on can return before the copy has
+          # finished — and its exit code is not the uninstall's. Judge the
+          # outcome instead, giving the second stage time to complete.
+          $app = Join-Path $root "app"
+          $deadline = (Get-Date).AddSeconds(90)
+          while ((Test-Path $app) -and (Get-Date) -lt $deadline) { Start-Sleep 1 }
+
+          Write-Host "uninstaller process exited $($run.ExitCode)"
+          if (Test-Path $log) { Get-Content $log | Select-Object -Last 25 }
+          if (Test-Path $app) {
+              Get-ChildItem -Recurse $app | Select-Object -First 20 FullName
+              throw "the app directory survived"
+          }
+          if (Test-Path (Join-Path $root "bin\ffmpeg.exe")) { throw "ffmpeg survived" }
+          if (-not (Test-Path (Join-Path $recordings "keep-me.wav"))) {
+              throw "THE UNINSTALLER DELETED THE USER'S RECORDINGS"
+          }
+          Write-Host "app removed, recordings intact"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: beyondMeetings-Setup-x64
+          path: dist/beyondMeetings-Setup-x64.exe
+          if-no-files-found: error
+
+      - name: Attach it to the release
+        if: github.event_name == 'release'
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "${{ github.event.release.tag_name }}" dist\beyondMeetings-Setup-x64.exe --clobber

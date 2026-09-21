@@ -13,7 +13,8 @@ from pathlib import Path
 from .audio.factory import build_recorder
 from .config import DEFAULT_CONFIG_PATH, load_config
 from .desktop import (
-    DEFAULT_PORT, open_app, open_browser, open_browser_when_ready, wait_until,
+    DEFAULT_PORT, open_app, open_browser, open_browser_when_ready,
+    report_headless, wait_until,
 )
 from .doctor.base import completion_percent, run_all
 from .doctor.registry import build_checks
@@ -228,6 +229,9 @@ def main(argv: list[str] | None = None) -> int:
         try:
             outcome = open_app(args.port)
         except RuntimeError as exc:
+            # This is what the Windows app icon runs, through pythonw, which
+            # has no stderr — so the message has to find another way out.
+            report_headless(str(exc))
             raise SystemExit(str(exc)) from exc
         url = f"http://127.0.0.1:{args.port}/"
         print(

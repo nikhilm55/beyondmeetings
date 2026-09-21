@@ -179,14 +179,168 @@ One review item did not hold up: `pipeline.py:71` was reported as missing an
 encoding, but the argument is on line 79 of the same call. `discussion.py` and
 `desktop.py` were already explicit too.
 
+## Follow-up: the bare-machine install (2026-09-21)
+
+The first person to run this on a **freshly installed Windows** could not
+install. The cause was the install contract above quietly assuming a developer
+machine:
+
+- `pip install "beyondmeetings[desktop] @ git+<url>"` shells out to `git`, and
+  a clean Windows has none. Every developer box and every CI runner has git,
+  so nothing here could see it. The documented fallback — `git clone` — was
+  equally unavailable.
+- ffmpeg was never installed or even checked on Windows. `install_hint()`
+  offered `apt`/`dnf`. The install "succeeded" and the first transcription
+  failed.
+- WebView2, which `pywebview` draws the window in, ships with Windows 11 but
+  not always with Windows 10. Without it the installer's last act — opening
+  the app — fails.
+- The app's exit code *was* the installer's exit code, so `install.cmd`
+  reported "Installation failed" for an install that had worked.
+
+### What changed
+
+- **git is optional.** The source comes from the checkout beside the script,
+  else GitHub's source zip fetched with `Invoke-WebRequest`; the `git+` spec
+  survives only as a third fallback.
+- **Python has three routes**, not two: a usable system Python, then uv, then
+  `winget install Python.Python.3.12`. Each result is checked rather than
+  assumed, so a blocked `astral.sh` produces a sentence and a retry, not a
+  raw PowerShell terminating error.
+- **`provision_windows.py`** fetches ffmpeg (winget, else a static build into
+  `%LOCALAPPDATA%\beyondMeetings\bin`) and the WebView2 Evergreen
+  bootstrapper. It is Python, not more PowerShell, for the same reason
+  `desktop_windows.py` is: `doctor` needs the identical behaviour afterwards,
+  one implementation cannot drift from itself, and every edge — network,
+  winget, registry, the Microsoft installer — is injected, so it is
+  unit-tested on the Linux development machine.
+- **`tools.which_tool`** searches the app's own bin directory as well as
+  `PATH`, so fetching ffmpeg needs no registry PATH edit. It returns exactly
+  `shutil.which` off Windows, which `tests/test_tools.py` pins.
+- **A point of no return.** Once the application is installed, no later step
+  may exit non-zero; a prerequisite that could not be fetched is a reported
+  row. `tests/test_install_ps1.py` asserts there is no `exit 1` after that
+  marker comment, and that every earlier one points at
+  `%TEMP%\beyondmeetings-install.log`.
+
+### Verification added
+
+- `tests/test_install_ps1.py` lifts `Get-ProjectSource` out of `install.ps1`
+  by parsing it, and runs it against a zip served over loopback — so "no git
+  is required" is executed, not grepped. It runs wherever `pwsh` exists,
+  which is both CI platforms.
+- A CI step installs end to end on `windows-latest` with `git` stripped from
+  `PATH`, then runs the installed command and uninstalls again. That step is
+  the regression guard for the original bug.
+- `docs/windows-smoke-test.md` gains section 0: run it on a clean VM, and
+  again with the network cut, to prove an unfetchable prerequisite still
+  leaves a working install.
+
+### What review caught afterwards
+
+Nine defects, most of them the same shape: a fix that is correct in isolation
+and wrong once the rest of the run is considered.
+
+- winget puts ffmpeg on the *stored* PATH, not this process's, so a
+  winget-installed ffmpeg was invisible to the app the installer then
+  launched — the first transcription would still have failed. The installer
+  now refreshes PATH after provisioning.
+- `Update-PathFromRegistry` assigned over `$env:Path` rather than merging,
+  discarding process-scoped entries for the rest of the run.
+- The log advertised in every failure message contained none of the failure
+  information: only `Say`/`Warn` reached it, while the terminal failures used
+  bare `Write-Host` and no command's output was captured at all. `Fail` and
+  `Invoke-Logged` close both halves.
+- `WebView2Check.fix` discarded the outcome and re-detected, so a successful
+  install reported "Not installed" — the Evergreen bootstrapper exits before
+  the registry catches up. `FfmpegCheck` already handled the same case.
+- `BEYONDMEETINGS_REPO` ending in `.git` 404s against GitHub's archive path,
+  and appending `@main` to the git fallback pinned a fork whose default
+  branch is `master` to a branch it does not have.
+- `uninstall.ps1` kept the empty-`LOCALAPPDATA` bug `install.ps1` had just
+  fixed, making the program unremovable by its own script in exactly the
+  session where installing now works.
+- `Get-ProjectSource` never deleted its `%TEMP%` scratch directory, and
+  `provision_windows.run()` had no timeout, past the point where the
+  installer can still report anything.
+
+## Follow-up: one file, no network (2026-09-21)
+
+The bare-machine work above made `install.ps1` self-sufficient: it detects
+and fetches everything a fresh Windows lacks. It did not remove the last
+requirement, which is a working network at install time and a user willing to
+paste a command into PowerShell. `beyondMeetings-Setup-x64.exe` removes both.
+
+The whole dependency tree is resolved on a build agent and shipped inside the
+installer: a relocatable CPython from python-build-standalone, every wheel
+built with *that* interpreter, and ffmpeg through the same URL and the same
+extraction code the application already uses. Installing then makes zero
+network requests, which CI asserts by pointing every proxy variable at a
+closed port before running the installer unattended.
+
+Three decisions are worth recording, because each has a plausible-looking
+alternative that does not work.
+
+**The venv is built on the user's machine, not on the build agent.** pip
+writes the absolute path of the interpreter into every console script it
+generates, so a pre-built environment points `beyondmeetings.exe` at a
+directory that does not exist on the user's disk. `setup-finish.ps1` runs
+`python -m venv` and then `pip install --no-index --find-links` against the
+bundled wheels. That is also what makes the result identical to what
+`install.ps1` produces, so `doctor` and `uninstall.ps1` need no new cases.
+
+**No pywebview, and therefore no WebView2.** The app is used in a browser, so
+a native window would only add a Microsoft runtime to fetch on a machine that
+may not be able to fetch anything. The Start Menu shortcut runs
+`pythonw.exe -m beyondmeetings open`, which is idempotent — a second click
+reuses the running server rather than failing to bind the port — and shows no
+console window. `install_shortcut()` now picks that target automatically when
+pywebview is absent, so `doctor`'s repair does not overwrite it with a
+shortcut to a window that cannot open.
+
+**`{app}` is the `app` subdirectory, never its parent.** `%LOCALAPPDATA%`
+`\beyondMeetings` and `%LOCALAPPDATA%\beyondmeetings` differ only in case,
+which on Windows means they are one directory: the program and every
+recording live in it side by side. An uninstaller aimed one level too high
+deletes the user's meetings. Static tests assert the `DefaultDirName` and
+every `[UninstallDelete]` rule, and the CI job plants a recording before
+uninstalling and fails loudly if it is gone afterwards.
+
+Two smaller things fell out of making the browser route the primary one.
+`resolve_executable()` looked for a file called `beyondmeetings` with no
+extension, which is never a file on Windows, and then fell back to a POSIX
+path — so `beyondmeetings open` could not find the server to launch.
+`launch_server()` relied on `start_new_session`, which subprocess ignores on
+Windows, so the server was a child of a launcher about to exit and flashed a
+console on the way up. Both are now platform-aware and unit-tested on Linux.
+
 ## Known limits
 
-- Neither `install.ps1` nor `uninstall.ps1` has been executed. No PowerShell
-  exists on the development machine; the first real validation is the CI
-  parse-and-dry-run job.
+- `FfmpegCheck.fix` on Windows downloads ~100 MB inside a synchronous wizard
+  request. FastAPI runs it off the event loop so nothing else stalls, but the
+  browser's own fetch may give up before the download finishes; the row is
+  correct on the next `doctor` either way. Making it a background job with a
+  progress row is the real fix.
+- The installers are still only *partly* executed by CI. `install.ps1` now
+  runs end to end on `windows-latest`, but that runner has Python and
+  WebView2 already, so the uv and winget Python routes and the WebView2
+  bootstrapper remain exercised only by unit tests and by section 0 of the
+  smoke test.
 - The suite has never run on Windows before. The first `windows-latest` run may
   surface pre-existing POSIX assumptions beyond the four modules guarded here —
   `test_secrets.py` asserts `0o600` file modes and `test_mcp_setup.py` creates a
   symlink, both of which behave differently on Windows.
 - Real capture quality on Windows remains unverified until someone runs
   section 3 of the smoke test.
+- `beyondMeetings-Setup-x64.exe` is unsigned, so SmartScreen shows a warning
+  the first time anyone runs it. Signing needs a code-signing certificate and
+  a secret in CI; until then the smoke test tells testers to expect it.
+- The setup.exe redistributes an ffmpeg binary rather than downloading it on
+  the user's behalf, which is a different licensing position. The build
+  extracts the ffmpeg build's own `LICENSE` beside the binaries and refuses
+  to produce an installer without one, but nobody has reviewed whether an
+  MIT-licensed app shipping a GPL ffmpeg needs more than that.
+- The setup.exe bundles a CPython resolved from the *latest* upstream release
+  at build time rather than a pinned one. That keeps it from rotting, at the
+  cost of two builds of the same commit potentially shipping different patch
+  versions. A lockfile is the right answer if that ever matters.

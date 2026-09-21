@@ -65,7 +65,7 @@ python_is_usable() {
 
 OS="$(uname -s)"
 
-PS_ONE_LINER="irm -useb https://raw.githubusercontent.com/nikhilm55/beyondmeetings/main/install.ps1 | iex"
+PS_ONE_LINER="irm -useb https://raw.githubusercontent.com/nikhilm55/beyondmeetings/dev/install.ps1 | iex"
 
 # Git Bash, MSYS and Cygwin are a trap: uname reports MINGW*/MSYS*/CYGWIN*, so
 # this script would run to completion — but a Windows venv puts python in

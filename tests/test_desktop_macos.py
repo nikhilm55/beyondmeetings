@@ -87,7 +87,7 @@ def test_the_plist_declares_the_minimum_system_version(tmp_path):
 
 def test_the_launcher_invokes_the_installed_command(tmp_path):
     bundle = install_app_bundle(home=tmp_path)
-    launcher = (bundle / "Contents" / "MacOS" / "beyondMeetings").read_text()
+    launcher = (bundle / "Contents" / "MacOS" / "beyondMeetings").read_text(encoding="utf-8")
 
     assert "beyondmeetings" in launcher
     assert " app" in launcher
@@ -97,7 +97,7 @@ def test_the_capture_helper_is_copied_into_the_bundle(tmp_path):
     """The helper must live inside the bundle to inherit its identity."""
     built = tmp_path / "built" / "bmcapture"
     built.parent.mkdir()
-    built.write_text("#!/bin/sh\n")
+    built.write_text("#!/bin/sh\n", encoding="utf-8")
     built.chmod(0o755)
 
     bundle = install_app_bundle(home=tmp_path, helper=built)

@@ -7,6 +7,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
+
 from beyondmeetings.audio.pipewire import PipeWireRecorder
 
 # Repo root, matching the convention in tests/test_packaging.py. A relative
@@ -60,3 +62,30 @@ def test_the_linux_launcher_module_is_untouched():
     source = ROOT / "src" / "beyondmeetings" / "desktop.py"
     assert source.is_file(), "desktop.py must remain a module, not become a package"
     assert not (ROOT / "src" / "beyondmeetings" / "desktop").exists()
+
+
+@pytest.mark.skipif(
+    sys.platform == "win32",
+    reason="this file is about Linux behaviour; on Windows the reverse is wanted",
+)
+def test_the_cli_loads_no_windows_module():
+    """provision_windows and desktop_windows belong inside a Windows branch.
+
+    Only our own modules are considered: platformdirs legitimately imports
+    platformdirs.windows and winreg when it runs on Windows, and matching on
+    the bare word caught those on the Windows runner.
+    """
+    loaded = _modules_after("import beyondmeetings.cli")
+    windows = {
+        m for m in loaded if m.startswith("beyondmeetings.") and "windows" in m
+    }
+    assert not windows, f"Linux CLI imported Windows modules: {sorted(windows)}"
+
+
+def test_resolving_ffmpeg_on_linux_looks_only_at_path(monkeypatch):
+    """which_tool replaced shutil.which in the transcriber. Off Windows the
+    two have to stay indistinguishable, or a Linux box starts consulting
+    directories that mean nothing to it."""
+    from beyondmeetings.tools import app_bin_dirs
+
+    assert app_bin_dirs("linux") == []
