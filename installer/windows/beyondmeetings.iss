@@ -135,13 +135,18 @@ Type: dirifempty; Name: "{localappdata}\{#AppName}\bin"
 
 [Code]
 
-(* Stop anything running out of the install directory.
-
-   An upgrade cannot overwrite a locked python .dll, and an uninstall cannot
-   delete one. Scoping the match to executables inside the install directory
-   is what makes this safe: the user's own Python, and anyone else's, is left
-   alone. Note for editors: Pascal brace comments do not nest, so an Inno
-   constant written out in one would end the comment early — hence (* *). *)
+// Stop anything running out of the install directory.
+//
+// An upgrade cannot overwrite a locked python .dll, and an uninstall cannot
+// delete one. Scoping the match to executables inside the install directory
+// is what makes this safe: the user's own Python, and anyone else's, is left
+// alone.
+//
+// Note for editors: every comment in this section is a line comment. Pascal
+// block comments do not nest, in either spelling, so writing an Inno
+// constant in one ends it early and the rest of the sentence is compiled as
+// code. That is not hypothetical — the first version of this very comment
+// was a block comment containing the characters that close one.
 procedure StopRunningApp();
 var
   ResultCode: Integer;
@@ -163,7 +168,7 @@ begin
   Result := '';
 end;
 
-{ Build the environment out of the wheels that were just copied. }
+// Build the environment out of the wheels that were just copied.
 function RunSetupFinish(): Integer;
 var
   ResultCode: Integer;
@@ -189,9 +194,9 @@ begin
       'Setting up the Python environment. This takes about a minute...';
     Code := RunSetupFinish();
     if Code <> 0 then
-      { Not a fatal error: the files are on disk and re-running the setup is a
-        real fix. What matters is that the user is told, and told where to
-        look, rather than being handed a Start Menu icon that does nothing. }
+      // Not a fatal error: the files are on disk and re-running the setup is
+      // a real fix. What matters is that the user is told, and told where to
+      // look, rather than handed a Start Menu icon that does nothing.
       MsgBox('{#AppName} was copied, but its Python environment could not be'
         + ' built (code ' + IntToStr(Code) + ').' + #13#10#13#10
         + 'The log is at ' + ExpandConstant('{%TEMP}\beyondmeetings-setup.log')

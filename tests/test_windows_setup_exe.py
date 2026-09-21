@@ -302,9 +302,8 @@ def test_ffmpeg_lands_where_the_application_looks_for_it(iss):
 
 
 def test_the_app_icon_opens_the_browser_app_without_a_console(iss):
-    icons = [line for line in iss.splitlines() if "userprograms" in line]
-    assert icons, "no Start Menu entry"
-    block = iss.split("[Icons]", 1)[1].split("[Run]", 1)[0]
+    block = _section(iss, "Icons")
+    assert "userprograms" in block, "no Start Menu entry"
     assert "pythonw.exe" in block, "a console script flashes a black window"
     assert "-m beyondmeetings open" in block, (
         "`open` is the idempotent one — `serve` fails to bind on a second click"
@@ -312,22 +311,71 @@ def test_the_app_icon_opens_the_browser_app_without_a_console(iss):
     assert " app\"" not in block, "this build ships no pywebview to draw a window"
 
 
-def test_a_constant_is_never_written_inside_a_pascal_comment(iss):
-    """Brace comments do not nest, so `{app}` inside one ends it early and the
-    rest of the sentence is compiled as code. It costs nothing to check."""
-    code = iss.split("[Code]", 1)[1]
-    # "{ " opens a comment; an Inno constant is "{app}", never "{ app}". So a
-    # second opening brace before the comment closes is the bug, exactly.
-    nested = re.findall(r"\{\s[^{}]*\{[a-zA-Z#]", code)
-    assert not nested, f"an Inno constant inside a brace comment: {nested}"
+def _section(iss: str, name: str) -> str:
+    """One section of the .iss, from its header line to the next one.
+
+    Anchored at the start of a line, because a section *name* also appears in
+    ordinary prose — "handled in [Code]" is a comment near the top of the
+    file, and splitting on the bare string landed in the middle of [Setup].
+    """
+    found = re.search(
+        rf"^\[{name}\]$(.*?)(?=^\[[A-Za-z]+\]$|\Z)",
+        iss, re.MULTILINE | re.DOTALL,
+    )
+    assert found, f"no [{name}] section"
+    return found.group(1)
 
 
-def test_the_nesting_guard_actually_detects_the_bug():
-    """A static guard nobody has seen fail is a guard nobody can trust."""
-    sample = "[Code]\n{ executables inside {app} are stopped }\n"
-    code = sample.split("[Code]", 1)[1]
+def _code_outside_strings(iss: str) -> str:
+    """The [Code] section with its Pascal string literals blanked out.
 
-    assert re.findall(r"\{\s[^{}]*\{[a-zA-Z#]", code)
+    Braces are legal and common inside a literal — `ExpandConstant('{app}')`
+    and a PowerShell script block both contain them — so any check for stray
+    braces has to look at the code around the strings, not at the text.
+    """
+    return re.sub(r"'(?:[^']|'')*'", "''", _section(iss, "Code"))
+
+
+def test_the_code_section_uses_only_line_comments(iss):
+    """Pascal has three comment forms here and two of them are block comments
+    that do not nest — in either spelling. Writing an Inno constant in one
+    ends it early and the rest of the sentence is compiled as code.
+
+    This is not hypothetical. The first version of this installer carried a
+    `(* ... *)` comment whose text mentioned `(* *)`, which closed itself and
+    failed the build with "'BEGIN' expected". Allowing only `//` removes the
+    whole class of mistake, so that is what is asserted.
+    """
+    bare = _code_outside_strings(iss)
+
+    assert "(*" not in bare, "a (* *) comment — use // instead"
+    assert "{" not in bare, "a { } comment or a stray constant — use // instead"
+
+
+@pytest.mark.parametrize(
+    "comment",
+    [
+        "{ executables inside {app} are stopped }",
+        "(* it ends at the first *) not the last *)",
+    ],
+)
+def test_the_comment_guard_actually_detects_the_bug(comment):
+    """A static guard nobody has seen fail is a guard nobody can trust.
+
+    Both of these compile to something other than a comment. The second is
+    the one that actually broke a build.
+    """
+    bare = _code_outside_strings(f"[Code]\n{comment}\n")
+
+    assert "(*" in bare or "{" in bare
+
+
+def test_the_guard_does_not_trip_on_braces_inside_a_string():
+    sample = "[Code]\nX := ExpandConstant('{app}') + 'a || b { c }';\n"
+
+    bare = _code_outside_strings(sample)
+
+    assert "{" not in bare
 
 
 def test_the_minimum_windows_is_stated(iss):

@@ -169,11 +169,15 @@ def test_a_broken_import_system_is_not_a_window():
 
 
 def test_the_shortcut_carries_the_application_icon():
+    # Built from the Path, not written out: str(Path) uses backslashes on
+    # Windows and forward slashes here, and the assertion is about the
+    # shortcut carrying an icon at all.
+    icon = Path("C:/app/icon.ico")
     script = build_shortcut_script(
-        Path("C:/link.lnk"), Path("C:/pythonw.exe"), icon=Path("C:/app/icon.ico")
+        Path("C:/link.lnk"), Path("C:/pythonw.exe"), icon=icon
     )
 
-    assert "$link.IconLocation = 'C:/app/icon.ico'" in script
+    assert f"$link.IconLocation = '{icon}'" in script
 
 
 def test_an_icon_free_shortcut_sets_no_icon_location():
@@ -197,7 +201,9 @@ def test_the_windows_command_is_the_exe_beside_the_interpreter():
     returned a POSIX path that could not exist there."""
     found = resolve_executable(platform="win32")
 
-    assert found.endswith("beyondmeetings.exe")
+    # Case-insensitively: shutil.which builds the name from PATHEXT, which is
+    # upper case on Windows, so a real hit comes back as `...\\bm.EXE`.
+    assert found.lower().endswith("beyondmeetings.exe"), found
     assert Path(found).is_absolute()
 
 
