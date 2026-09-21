@@ -510,3 +510,59 @@ def test_both_installers_build_the_same_layout():
         "venv\\Scripts\\beyondmeetings.exe",
     )
     assert r"{app}\venv\Scripts" in iss
+
+
+# --- the release lookup ------------------------------------------------------
+
+
+def test_the_release_lookup_authenticates_when_it_can():
+    """60 anonymous API calls an hour, per IP, shared between runners: two
+    builds of one push were enough for `403: rate limit exceeded`."""
+    headers = build_payload.api_headers({"GITHUB_TOKEN": "ghs_secret"})
+
+    assert headers["Authorization"] == "Bearer ghs_secret"
+
+
+def test_either_token_variable_is_honoured():
+    """Actions sets GITHUB_TOKEN; the gh CLI sets GH_TOKEN."""
+    assert "Authorization" in build_payload.api_headers({"GH_TOKEN": "x"})
+
+
+def test_it_still_works_with_no_token_at_all():
+    """A developer running this by hand has neither."""
+    headers = build_payload.api_headers({})
+
+    assert "Authorization" not in headers
+    assert headers["User-Agent"]
+
+
+def test_the_workflow_passes_a_token_to_the_payload_step():
+    workflow = (
+        ROOT / ".github" / "workflows" / "windows-installer.yml"
+    ).read_text(encoding="utf-8")
+    step = workflow.split("Assemble the payload", 1)[1].split("- name:", 1)[0]
+
+    assert "GITHUB_TOKEN" in step
+
+
+def test_the_workflow_does_not_race_itself():
+    """Push and pull_request both fire it, and the job is expensive."""
+    workflow = (
+        ROOT / ".github" / "workflows" / "windows-installer.yml"
+    ).read_text(encoding="utf-8")
+
+    assert "cancel-in-progress: true" in workflow
+
+
+def test_no_native_command_is_piped_into_a_short_circuiting_filter():
+    """`ffmpeg -version | Select-Object -First 1` stops the pipeline early,
+    PowerShell kills the command, and $LASTEXITCODE then reports a failure
+    for output it simply stopped reading. It failed a passing install."""
+    workflow = (
+        ROOT / ".github" / "workflows" / "windows-installer.yml"
+    ).read_text(encoding="utf-8")
+
+    for line in workflow.splitlines():
+        if "Select-Object -First" not in line or line.lstrip().startswith("#"):
+            continue
+        assert not line.lstrip().startswith("&"), line

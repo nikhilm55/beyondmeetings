@@ -20,6 +20,13 @@ on:
 permissions:
   contents: write
 
+# A push to a PR branch fires this twice, once per event. The job downloads
+# an interpreter and compresses 300 MB, and the two copies raced each other
+# into GitHub's anonymous API rate limit, so the second one is cancelled.
+concurrency:
+  group: windows-installer-${{ github.head_ref || github.ref_name }}
+  cancel-in-progress: true
+
 jobs:
   setup-exe:
     name: setup.exe
@@ -33,7 +40,11 @@ jobs:
         with:
           python-version: "3.12"
 
+      # The token is only for the release lookup that picks a CPython build.
+      # Anonymous GitHub API calls are limited per IP, and runners share them.
       - name: Assemble the payload
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
         run: python installer/windows/build_payload.py --out build/windows/payload
 
       - name: The payload holds what the installer promises
@@ -117,8 +128,14 @@ jobs:
           # ffmpeg has to be found without a PATH edit — the application looks
           # in its own bin directory. This asserts the binary is really there
           # and really runs, which a `which` would not.
-          & (Join-Path $root "bin\ffmpeg.exe") -version | Select-Object -First 1
+          #
+          # Captured, not piped into Select-Object: an upstream `-First` stops
+          # the pipeline, PowerShell kills the native command, and
+          # $LASTEXITCODE reports a failure for output it simply stopped
+          # reading. ffmpeg printed its banner perfectly and this threw.
+          $banner = & (Join-Path $root "bin\ffmpeg.exe") -version 2>&1
           if ($LASTEXITCODE -ne 0) { throw "the bundled ffmpeg does not run" }
+          Write-Host ($banner | Select-Object -First 1)
 
           if (-not (Test-Path (Join-Path $root "app\venv\Scripts\beyondmeetings.exe"))) {
               throw "no console script — setup-finish.ps1 did not complete"

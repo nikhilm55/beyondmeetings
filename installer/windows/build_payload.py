@@ -29,6 +29,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import shutil
 import subprocess
@@ -119,9 +120,26 @@ def resolve_python_url(release: dict, **kwargs) -> str:
     raise LookupError(f"{wanted} has no download URL")
 
 
+def api_headers(environ=None) -> dict[str, str]:
+    """Headers for the release lookup, authenticated when we can be.
+
+    GitHub allows 60 anonymous API calls an hour *per IP*, and CI runners
+    share addresses — two builds of the same push were enough to get a
+    `403: rate limit exceeded`, which failed a job that had nothing wrong
+    with it. A token raises the limit to 5000, and every workflow already
+    has one.
+    """
+    environ = os.environ if environ is None else environ
+    headers = {"User-Agent": USER_AGENT, "Accept": "application/vnd.github+json"}
+    token = environ.get("GITHUB_TOKEN") or environ.get("GH_TOKEN")
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+    return headers
+
+
 def read_json(url: str) -> dict:
     """Fetch and parse JSON. Replaced by a fake in tests."""
-    request = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
+    request = urllib.request.Request(url, headers=api_headers())
     with urllib.request.urlopen(request, timeout=API_TIMEOUT) as response:
         return json.loads(response.read().decode("utf-8"))
 
