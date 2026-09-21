@@ -98,6 +98,10 @@ Source: "{#Payload}\bin\ffmpeg.exe"; DestDir: "{localappdata}\{#AppName}\bin"; \
     Flags: ignoreversion
 Source: "{#Payload}\bin\ffprobe.exe"; DestDir: "{localappdata}\{#AppName}\bin"; \
     Flags: ignoreversion
+; Bundling someone else's binary is redistribution, which downloading it on
+; the user's behalf was not. Its licence travels with it.
+Source: "{#Payload}\bin\ffmpeg-LICENSE.txt"; \
+    DestDir: "{localappdata}\{#AppName}\bin"; Flags: ignoreversion
 
 Source: "setup-finish.ps1"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#IconFile}"; DestDir: "{app}"; DestName: "beyondmeetings.ico"; \

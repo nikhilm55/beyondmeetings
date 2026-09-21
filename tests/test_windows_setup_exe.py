@@ -192,10 +192,12 @@ def test_ffmpeg_is_fetched_into_the_bin_directory(tmp_path):
         tmp_path,
         fetch=lambda url, dest: seen.__setitem__("url", url),
         extract=extract,
+        licence=lambda archive, dest: dest / "ffmpeg-LICENSE.txt",
+        report=lambda message: None,
     )
 
     assert seen["dest"] == tmp_path
-    assert seen["url"] == build_payload.FFMPEG_URL
+    assert seen["url"] == build_payload.FFMPEG_URL, "the app's own source first"
 
 
 # --- wheels -------------------------------------------------------------------
@@ -297,8 +299,14 @@ def test_ffmpeg_lands_where_the_application_looks_for_it(iss):
     """Not on PATH — in the directory tools.which_tool searches."""
     from beyondmeetings.tools import APP_DIR_NAME
 
-    expected = f'DestDir: "{{localappdata}}\\{APP_DIR_NAME}\\bin"'
-    assert iss.count(expected) == 2, "ffmpeg.exe and ffprobe.exe both go there"
+    bin_dir = f'DestDir: "{{localappdata}}\\{APP_DIR_NAME}\\bin"'
+    for shipped in ("ffmpeg.exe", "ffprobe.exe", "ffmpeg-LICENSE.txt"):
+        placed = [
+            line for line in iss.replace("; \\\n", "; ").splitlines()
+            if shipped in line
+        ]
+        assert placed, f"{shipped} is not shipped at all"
+        assert any(bin_dir in line for line in placed), f"{shipped}: {placed}"
 
 
 def test_the_app_icon_opens_the_browser_app_without_a_console(iss):
@@ -566,3 +574,117 @@ def test_no_native_command_is_piped_into_a_short_circuiting_filter():
         if "Select-Object -First" not in line or line.lstrip().startswith("#"):
             continue
         assert not line.lstrip().startswith("&"), line
+
+
+# --- a build must not hinge on one host being up -----------------------------
+
+
+def test_a_transient_failure_is_retried():
+    """gyan.dev returned a 503 in the middle of an otherwise good build."""
+    attempts = []
+
+    def flaky():
+        attempts.append(1)
+        if len(attempts) < 3:
+            raise OSError("HTTP Error 503: Service Unavailable")
+        return "downloaded"
+
+    result = build_payload.with_retries(
+        flaky, sleep=lambda seconds: None, report=lambda message: None
+    )
+
+    assert result == "downloaded"
+    assert len(attempts) == 3
+
+
+def test_the_backoff_grows():
+    waits = []
+
+    with pytest.raises(OSError):
+        build_payload.with_retries(
+            lambda: (_ for _ in ()).throw(OSError("down")),
+            sleep=waits.append, report=lambda message: None,
+        )
+
+    assert waits == sorted(waits) and len(set(waits)) == len(waits), waits
+
+
+def test_a_permanent_failure_still_raises_the_real_error():
+    """Retrying must not turn a 404 into something unrecognisable."""
+    with pytest.raises(OSError, match="404"):
+        build_payload.with_retries(
+            lambda: (_ for _ in ()).throw(OSError("HTTP Error 404")),
+            sleep=lambda seconds: None, report=lambda message: None,
+        )
+
+
+def test_a_dead_source_falls_through_to_the_mirror(tmp_path):
+    seen = []
+
+    def fetch(url, dest):
+        seen.append(url)
+        if url == build_payload.FFMPEG_URL:
+            raise OSError("HTTP Error 503: Service Unavailable")
+        Path(dest).write_bytes(b"zip")
+
+    written = build_payload.fetch_ffmpeg(
+        tmp_path, fetch=fetch,
+        extract=lambda archive, dest: [dest / "ffmpeg.exe"],
+        licence=lambda archive, dest: dest / "ffmpeg-LICENSE.txt",
+        sleep=lambda seconds: None, report=lambda message: None,
+    )
+
+    assert written
+    assert seen[-1] == build_payload.FFMPEG_MIRROR
+
+
+def test_the_mirror_is_hosted_somewhere_else():
+    """A second URL on the same host fails at the same moment as the first."""
+    first = build_payload.FFMPEG_URL.split("/")[2]
+    second = build_payload.FFMPEG_MIRROR.split("/")[2]
+
+    assert first != second
+
+
+def test_every_source_failing_names_every_source(tmp_path):
+    with pytest.raises(RuntimeError) as failure:
+        build_payload.fetch_ffmpeg(
+            tmp_path,
+            fetch=lambda url, dest: (_ for _ in ()).throw(OSError("down")),
+            sleep=lambda seconds: None, report=lambda message: None,
+        )
+
+    for url in build_payload.FFMPEG_SOURCES:
+        assert url in str(failure.value)
+
+
+def test_a_build_with_no_licence_to_ship_is_refused(tmp_path):
+    """Quietly shipping someone else's binary without its licence is worse
+    than a failed build."""
+    with pytest.raises(RuntimeError, match="LICENSE"):
+        build_payload.fetch_ffmpeg(
+            tmp_path,
+            fetch=lambda url, dest: Path(dest).write_bytes(b"zip"),
+            extract=lambda archive, dest: [dest / "ffmpeg.exe"],
+            licence=lambda archive, dest: None,
+            report=lambda message: None,
+        )
+
+
+def test_the_licence_is_found_whatever_the_archive_calls_it(tmp_path):
+    """gyan.dev ships LICENSE; the mirror ships LICENSE.txt."""
+    import zipfile as zf
+
+    for name in ("build/LICENSE", "build/LICENSE.txt"):
+        archive = tmp_path / "f.zip"
+        with zf.ZipFile(archive, "w") as bundle:
+            bundle.writestr(name, "GPL v3")
+            bundle.writestr("build/bin/ffmpeg.exe", "MZ")
+
+        found = build_payload.extract_licence(archive, tmp_path)
+
+        assert found is not None and found.read_text(encoding="utf-8") == "GPL v3"
+
+
+def test_the_installer_ships_the_licence_beside_the_binary(iss):
+    assert "ffmpeg-LICENSE.txt" in iss

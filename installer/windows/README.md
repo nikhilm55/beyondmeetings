@@ -17,7 +17,12 @@ it inside the installer.
 |---|---|---|
 | CPython 3.12, 64-bit | [python-build-standalone](https://github.com/astral-sh/python-build-standalone), `install_only` | Relocatable — it can be copied into `%LOCALAPPDATA%` and run from there. The same builds `uv` hands out. 3.12 rather than the newest, so every dependency has a wheel and nothing needs a compiler |
 | Every wheel | `pip wheel` run **with that interpreter** | A wheel built by the build agent's own Python can be the wrong ABI |
-| `ffmpeg.exe`, `ffprobe.exe` | The same URL and the same extraction code the application uses at runtime | One source of truth, so the installer and `doctor` cannot drift |
+| `ffmpeg.exe`, `ffprobe.exe` | The same URL and the same extraction code the application uses at runtime, with a GitHub-hosted mirror behind it | One source of truth, so the installer and `doctor` cannot drift. The mirror is on a different host because the first one returned a 503 mid-build and stopped a release for no reason |
+
+Every download retries with a growing backoff, and the ffmpeg build's
+`LICENSE` is extracted next to the binaries. Bundling someone else's binary
+is redistribution, which downloading it on the user's behalf was not, so a
+build that cannot find a licence to ship is refused rather than warned about.
 
 Deliberately *not* included: `pywebview` and the WebView2 runtime. The app is
 used in a browser, so a native window would only add a Microsoft runtime to

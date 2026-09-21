@@ -36,7 +36,9 @@ import subprocess
 import sys
 import tarfile
 import tempfile
+import time
 import urllib.request
+import zipfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -71,6 +73,25 @@ PYTHON_RELEASE_API = (
 EXTRAS = "tray"
 
 API_TIMEOUT = 60
+
+# Every download here is one host on one day. gyan.dev returned a 503 in the
+# middle of a build that was otherwise fine, and a release that cannot be cut
+# because a mirror hiccuped is a bad trade for three lines of retry.
+ATTEMPTS = 3
+FIRST_DELAY = 5.0
+
+# The second source is a GitHub release, so it fails independently of the
+# first. Its archive nests the binaries under a differently-named folder,
+# which extract_ffmpeg does not care about — it matches on the leaf name.
+FFMPEG_MIRROR = (
+    "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/"
+    "ffmpeg-master-latest-win64-gpl.zip"
+)
+FFMPEG_SOURCES = (FFMPEG_URL, FFMPEG_MIRROR)
+
+# Shipping the binary inside an installer is redistribution, which the one-
+# line installer's download-on-demand was not. The licence travels with it.
+LICENCE_NAME = "ffmpeg-LICENSE.txt"
 
 
 # --- choosing the interpreter ------------------------------------------------
@@ -137,6 +158,28 @@ def api_headers(environ=None) -> dict[str, str]:
     return headers
 
 
+def with_retries(action, attempts=ATTEMPTS, delay=FIRST_DELAY, sleep=time.sleep,
+                 report=print):
+    """Run `action`, backing off and trying again on any failure.
+
+    Deliberately catches everything: a 503, a DNS blip, a truncated read and
+    a proxy hanging up all look different and want the same response.
+    """
+    last: Exception | None = None
+    for attempt in range(1, attempts + 1):
+        try:
+            return action()
+        except Exception as exc:  # noqa: BLE001 - see the docstring
+            last = exc
+            if attempt == attempts:
+                break
+            report(f"  attempt {attempt}/{attempts} failed ({exc}); "
+                   f"retrying in {delay:.0f}s")
+            sleep(delay)
+            delay *= 2
+    raise last
+
+
 def read_json(url: str) -> dict:
     """Fetch and parse JSON. Replaced by a fake in tests."""
     request = urllib.request.Request(url, headers=api_headers())
@@ -191,10 +234,11 @@ def fetch_python(
     **kwargs,
 ) -> Path:
     if url is None:
-        url = resolve_python_url(api(PYTHON_RELEASE_API), **kwargs)
+        release = with_retries(lambda: api(PYTHON_RELEASE_API))
+        url = resolve_python_url(release, **kwargs)
     with tempfile.TemporaryDirectory(prefix="bm-runtime-") as scratch:
         archive = Path(scratch) / "python.tar.gz"
-        fetch(url, archive)
+        with_retries(lambda: fetch(url, archive))
         unpack(archive, dest)
     return dest
 
@@ -244,15 +288,63 @@ def collect_wheels(
     return dest
 
 
-def fetch_ffmpeg(dest: Path, fetch=download, extract=extract_ffmpeg) -> list[Path]:
-    """The same URL and the same extraction the application uses at runtime."""
-    with tempfile.TemporaryDirectory(prefix="bm-ffmpeg-") as scratch:
-        archive = Path(scratch) / "ffmpeg.zip"
-        fetch(FFMPEG_URL, archive)
-        written = extract(archive, dest)
-    if not written:
-        raise RuntimeError(f"{FFMPEG_URL} contained no ffmpeg.exe")
-    return written
+def extract_licence(archive: Path, dest: Path) -> Path | None:
+    """Pull the build's licence text out beside the binaries.
+
+    Both sources put a LICENSE at the root of their archive, under slightly
+    different names. Matching on the prefix rather than the exact name means
+    adding a third mirror does not silently ship without one.
+    """
+    with zipfile.ZipFile(archive) as bundle:
+        for entry in bundle.namelist():
+            leaf = entry.rsplit("/", 1)[-1]
+            if leaf.upper().startswith("LICENSE") and not entry.endswith("/"):
+                target = dest / LICENCE_NAME
+                target.write_bytes(bundle.read(entry))
+                return target
+    return None
+
+
+def fetch_ffmpeg(
+    dest: Path,
+    fetch=download,
+    extract=extract_ffmpeg,
+    licence=extract_licence,
+    sources=FFMPEG_SOURCES,
+    sleep=time.sleep,
+    report=print,
+) -> list[Path]:
+    """The binaries, from whichever source answers, with their licence.
+
+    The first source is the one the application itself uses at runtime, so
+    the build and `doctor` agree by default. The second exists because the
+    first returned a 503 mid-build once and stopped a release for no reason.
+    """
+    failures = []
+    for url in sources:
+        with tempfile.TemporaryDirectory(prefix="bm-ffmpeg-") as scratch:
+            archive = Path(scratch) / "ffmpeg.zip"
+            try:
+                with_retries(lambda: fetch(url, archive), sleep=sleep,
+                             report=report)
+            except Exception as exc:  # noqa: BLE001 - reported, then next source
+                report(f"  {url} did not answer ({exc})")
+                failures.append(f"{url}: {exc}")
+                continue
+
+            written = extract(archive, dest)
+            if not written:
+                failures.append(f"{url}: no ffmpeg.exe inside")
+                continue
+
+            # Refused rather than warned about: shipping someone else's
+            # binary without its licence is not a thing to do quietly.
+            if licence(archive, dest) is None:
+                raise RuntimeError(f"{url} carries no LICENSE to redistribute")
+            report(f"  ffmpeg from {url}")
+            return written
+
+    raise RuntimeError("no ffmpeg source worked:\n  " + "\n  ".join(failures))
 
 
 # --- putting it together -------------------------------------------------------

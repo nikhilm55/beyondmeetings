@@ -335,6 +335,11 @@ console on the way up. Both are now platform-aware and unit-tested on Linux.
 - `beyondMeetings-Setup-x64.exe` is unsigned, so SmartScreen shows a warning
   the first time anyone runs it. Signing needs a code-signing certificate and
   a secret in CI; until then the smoke test tells testers to expect it.
+- The setup.exe redistributes an ffmpeg binary rather than downloading it on
+  the user's behalf, which is a different licensing position. The build
+  extracts the ffmpeg build's own `LICENSE` beside the binaries and refuses
+  to produce an installer without one, but nobody has reviewed whether an
+  MIT-licensed app shipping a GPL ffmpeg needs more than that.
 - The setup.exe bundles a CPython resolved from the *latest* upstream release
   at build time rather than a pinned one. That keeps it from rotting, at the
   cost of two builds of the same commit potentially shipping different patch
