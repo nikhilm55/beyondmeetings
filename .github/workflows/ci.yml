@@ -98,15 +98,8 @@ jobs:
           if (Get-Command git -ErrorAction SilentlyContinue) {
               throw "git is still reachable; this step proves nothing"
           }
-          $out = ./install.ps1 -NoLaunch | Tee-Object -Variable shown
+          ./install.ps1 -NoLaunch
           if ($LASTEXITCODE -ne 0) { throw "installer exited $LASTEXITCODE" }
-          # Asserted directly rather than trusting PATH to stay stripped:
-          # the installer refreshes PATH from the registry after provisioning,
-          # and the runner's machine PATH carries Git. This proves pip was
-          # handed a directory, which is the thing git was needed for.
-          if (($shown + $out) -notmatch 'Installing from this checkout') {
-              throw "the installer did not resolve a git-free source"
-          }
 
       - name: the installed command runs
         if: runner.os == 'Windows'
@@ -117,13 +110,32 @@ jobs:
           & $shim --help
           if ($LASTEXITCODE -ne 0) { throw "the installed command exited $LASTEXITCODE" }
 
-      - name: the run is logged where a user can find it
+      # The log doubles as the record of what the installer actually did, so
+      # the source-resolution assertion is made against it. Reading it is the
+      # only way: the installer reports through Write-Host, which never
+      # reaches the pipeline, so capturing its output with Tee-Object matches
+      # nothing (it did exactly that, and failed a passing install).
+      - name: the run is logged, and records a git-free source
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
           $log = Join-Path $env:TEMP "beyondmeetings-install.log"
           if (-not (Test-Path $log)) { throw "no install log at $log" }
-          Get-Content $log
+          $text = Get-Content $log -Raw
+          Write-Host $text
+
+          # Trusting PATH to stay stripped is not enough on its own: the
+          # installer refreshes PATH from the registry after provisioning and
+          # the runner's machine PATH carries Git. This says pip was handed a
+          # directory, which is the thing git was needed for.
+          if ($text -notmatch 'Installing from this checkout') {
+              throw "the installer did not record a git-free source"
+          }
+          # ...and that the commands it shells out to reach the log at all,
+          # which is what every failure message promises.
+          if ($text -notmatch 'pip.*install') {
+              throw "the log does not carry the commands that were run"
+          }
 
       - name: uninstall removes what install added
         if: runner.os == 'Windows'

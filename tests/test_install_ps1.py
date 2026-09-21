@@ -14,6 +14,7 @@ installation on a machine with nothing on it.
 import re
 import shutil
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -386,3 +387,66 @@ def test_the_path_merge_keeps_process_only_entries(tmp_path):
     assert result.returncode == 0, result.stdout + result.stderr
     line = [x for x in result.stdout.splitlines() if x.startswith("RESULT=")][-1]
     assert "/only-in-this-process" in line
+
+
+# Invoke-Logged runs on every install and is the thing that puts a failure's
+# cause in the log, so it is executed rather than grepped. Its risk is the
+# PowerShell 5.1 rule that 2>&1 on a native command makes stderr terminating
+# under $ErrorActionPreference = "Stop" — a non-zero command must come back
+# as a number, not an exception.
+LOGGED_HARNESS = r"""
+# Not $Args: that is an automatic variable, and a parameter of that name
+# never binds. The harness had it, and the command ran with no arguments.
+param([string]$Installer, [string]$LogFile, [string]$Exe, [string]$Code)
+$ErrorActionPreference = "Stop"
+$LogPath = $LogFile
+
+$ast = [System.Management.Automation.Language.Parser]::ParseFile(
+    $Installer, [ref]$null, [ref]$null)
+$functions = $ast.FindAll(
+    { param($node)
+      $node -is [System.Management.Automation.Language.FunctionDefinitionAst] },
+    $false)
+Invoke-Expression (($functions | ForEach-Object { $_.Extent.Text }) -join "`n")
+
+$exitCode = Invoke-Logged $Exe @("-c", $Code)
+Write-Output "CODE=$exitCode"
+"""
+
+
+def _invoke_logged(tmp_path, code):
+    """Run `python -c <code>` through the installer's own Invoke-Logged."""
+    harness = tmp_path / "logged.ps1"
+    harness.write_text(LOGGED_HARNESS, encoding="utf-8")
+    log = tmp_path / "install.log"
+    result = subprocess.run(
+        ["pwsh", "-NoProfile", "-File", str(harness),
+         "-Installer", str(INSTALL), "-LogFile", str(log),
+         "-Exe", sys.executable, "-Code", code],
+        capture_output=True, text=True,
+    )
+    text = log.read_text(encoding="utf-8") if log.exists() else ""
+    return result, text
+
+
+@pytest.mark.skipif(shutil.which("pwsh") is None, reason="PowerShell not installed")
+def test_a_commands_output_reaches_the_log(tmp_path):
+    result, log = _invoke_logged(tmp_path, "print('hello from the command')")
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "CODE=0" in result.stdout
+    assert "hello from the command" in log
+    assert "-c" in log, "the command line itself should be recorded"
+
+
+@pytest.mark.skipif(shutil.which("pwsh") is None, reason="PowerShell not installed")
+def test_a_failing_command_returns_its_code_instead_of_throwing(tmp_path):
+    """Under 'Stop', an unguarded 2>&1 would make this an exception and the
+    installer would die with a stack trace instead of its own message."""
+    result, log = _invoke_logged(
+        tmp_path, "import sys; sys.stderr.write('it went wrong'); sys.exit(3)"
+    )
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "CODE=3" in result.stdout
+    assert "it went wrong" in log, "stderr is where the reason lives"
