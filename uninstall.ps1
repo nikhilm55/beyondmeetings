@@ -17,15 +17,24 @@ param(
 
 $ErrorActionPreference = "Stop"
 
+# Same fallback as install.ps1. Without it, a session with no LOCALAPPDATA
+# dies on Join-Path under "Stop" and the program becomes unremovable by its
+# own uninstaller — in exactly the session where install.ps1 now succeeds.
+$LocalAppData = if ($env:LOCALAPPDATA) {
+    $env:LOCALAPPDATA
+} else {
+    Join-Path $env:USERPROFILE "AppData\Local"
+}
+
 $InstallRoot = if ($env:BEYONDMEETINGS_HOME) {
     $env:BEYONDMEETINGS_HOME
 } else {
-    Join-Path $env:LOCALAPPDATA "beyondMeetings\app"
+    Join-Path $LocalAppData "beyondMeetings\app"
 }
 $BinDir = if ($env:BEYONDMEETINGS_BIN) {
     $env:BEYONDMEETINGS_BIN
 } else {
-    Join-Path $env:LOCALAPPDATA "beyondMeetings\bin"
+    Join-Path $LocalAppData "beyondMeetings\bin"
 }
 
 $Venv = Join-Path $InstallRoot "venv"
@@ -81,9 +90,9 @@ print(startup_shortcut_path())
 
 # Fallbacks for a half-removed install where Python is already gone.
 if (-not $ConfigFile) {
-    $ConfigFile = Join-Path $env:LOCALAPPDATA "beyondmeetings\config.toml"
+    $ConfigFile = Join-Path $LocalAppData "beyondmeetings\config.toml"
 }
-if (-not $DataDir) { $DataDir = Join-Path $env:LOCALAPPDATA "beyondmeetings" }
+if (-not $DataDir) { $DataDir = Join-Path $LocalAppData "beyondmeetings" }
 if (-not $StartMenu) {
     $StartMenu = Join-Path $env:APPDATA `
         "Microsoft\Windows\Start Menu\Programs\beyondMeetings.lnk"

@@ -51,6 +51,12 @@ USER_AGENT = "beyondmeetings-installer"
 
 DOWNLOAD_TIMEOUT = 300
 
+# winget can sit on a source agreement prompt despite --disable-interactivity,
+# and the WebView2 bootstrapper can stall behind a proxy. This runs past the
+# point where install.ps1 can still fail, with output discarded, so without a
+# ceiling the user watches one progress line forever.
+RUN_TIMEOUT = 600
+
 
 @dataclass
 class Outcome:
@@ -95,13 +101,20 @@ def download(url: str, dest: Path) -> Path:
     return dest
 
 
-def run(args: list[str]) -> int:
-    """Run a command, discarding its output. Replaced by a fake in tests."""
+def run(args: list[str], timeout: float = RUN_TIMEOUT) -> int:
+    """Run a command, discarding its output. Replaced by a fake in tests.
+
+    A non-zero return covers every way this can go wrong, including hanging:
+    the caller's job is to fall back to another route, not to tell them apart.
+    """
     flags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
     try:
         return subprocess.run(
-            args, capture_output=True, check=False, creationflags=flags
+            args, capture_output=True, check=False, creationflags=flags,
+            timeout=timeout,
         ).returncode
+    except subprocess.TimeoutExpired:
+        return 1
     except OSError:
         return 1
 

@@ -236,8 +236,41 @@ machine:
   again with the network cut, to prove an unfetchable prerequisite still
   leaves a working install.
 
+### What review caught afterwards
+
+Nine defects, most of them the same shape: a fix that is correct in isolation
+and wrong once the rest of the run is considered.
+
+- winget puts ffmpeg on the *stored* PATH, not this process's, so a
+  winget-installed ffmpeg was invisible to the app the installer then
+  launched — the first transcription would still have failed. The installer
+  now refreshes PATH after provisioning.
+- `Update-PathFromRegistry` assigned over `$env:Path` rather than merging,
+  discarding process-scoped entries for the rest of the run.
+- The log advertised in every failure message contained none of the failure
+  information: only `Say`/`Warn` reached it, while the terminal failures used
+  bare `Write-Host` and no command's output was captured at all. `Fail` and
+  `Invoke-Logged` close both halves.
+- `WebView2Check.fix` discarded the outcome and re-detected, so a successful
+  install reported "Not installed" — the Evergreen bootstrapper exits before
+  the registry catches up. `FfmpegCheck` already handled the same case.
+- `BEYONDMEETINGS_REPO` ending in `.git` 404s against GitHub's archive path,
+  and appending `@main` to the git fallback pinned a fork whose default
+  branch is `master` to a branch it does not have.
+- `uninstall.ps1` kept the empty-`LOCALAPPDATA` bug `install.ps1` had just
+  fixed, making the program unremovable by its own script in exactly the
+  session where installing now works.
+- `Get-ProjectSource` never deleted its `%TEMP%` scratch directory, and
+  `provision_windows.run()` had no timeout, past the point where the
+  installer can still report anything.
+
 ## Known limits
 
+- `FfmpegCheck.fix` on Windows downloads ~100 MB inside a synchronous wizard
+  request. FastAPI runs it off the event loop so nothing else stalls, but the
+  browser's own fetch may give up before the download finishes; the row is
+  correct on the next `doctor` either way. Making it a background job with a
+  progress row is the real fix.
 - The installers are still only *partly* executed by CI. `install.ps1` now
   runs end to end on `windows-latest`, but that runner has Python and
   WebView2 already, so the uv and winget Python routes and the WebView2

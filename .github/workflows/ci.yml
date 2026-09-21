@@ -98,8 +98,15 @@ jobs:
           if (Get-Command git -ErrorAction SilentlyContinue) {
               throw "git is still reachable; this step proves nothing"
           }
-          ./install.ps1 -NoLaunch
+          $out = ./install.ps1 -NoLaunch | Tee-Object -Variable shown
           if ($LASTEXITCODE -ne 0) { throw "installer exited $LASTEXITCODE" }
+          # Asserted directly rather than trusting PATH to stay stripped:
+          # the installer refreshes PATH from the registry after provisioning,
+          # and the runner's machine PATH carries Git. This proves pip was
+          # handed a directory, which is the thing git was needed for.
+          if (($shown + $out) -notmatch 'Installing from this checkout') {
+              throw "the installer did not resolve a git-free source"
+          }
 
       - name: the installed command runs
         if: runner.os == 'Windows'

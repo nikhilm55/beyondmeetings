@@ -89,7 +89,11 @@ $Repo = if ($env:BEYONDMEETINGS_REPO) {
 } else {
     "https://github.com/nikhilm55/beyondmeetings"
 }
-$Ref = if ($env:BEYONDMEETINGS_REF) { $env:BEYONDMEETINGS_REF } else { "main" }
+# Whether the ref was *chosen* matters, not just its value: appending @main
+# to the git fallback pins a fork whose default branch is master or dev to a
+# branch it does not have, where the bare URL used to resolve correctly.
+$RefWasGiven = [bool]$env:BEYONDMEETINGS_REF
+$Ref = if ($RefWasGiven) { $env:BEYONDMEETINGS_REF } else { "main" }
 
 $Venv = Join-Path $InstallRoot "venv"
 $VenvPython = Join-Path $Venv "Scripts\python.exe"
@@ -117,6 +121,14 @@ function Warn([string]$Message) {
     Write-Log "  ! $Message"
 }
 
+# Every terminal failure goes through here. Using Write-Host for these meant
+# the log held a timestamp and some progress lines while the actual reason
+# the install stopped existed only on a screen the user had already closed.
+function Fail([string]$Message) {
+    Write-Host $Message -ForegroundColor Red
+    Write-Log $Message
+}
+
 Write-Log "beyondMeetings install started $(Get-Date -Format o)"
 Write-Log "PowerShell $($PSVersionTable.PSVersion) on $([Environment]::OSVersion.VersionString)"
 
@@ -127,6 +139,29 @@ function Invoke-Quiet {
     param([string]$Exe, [string[]]$Arguments)
     & $Exe @Arguments 2>$null | Out-Null
     return $LASTEXITCODE
+}
+
+# Runs a command, showing its output and putting it in the log. The reason
+# for a failed install is almost always in pip's or uv's output, and none of
+# it was being kept.
+function Invoke-Logged {
+    param([string]$Exe, [string[]]$Arguments)
+    Write-Log "  > $Exe $($Arguments -join ' ')"
+    $previous = $ErrorActionPreference
+    # 2>&1 turns a native command's stderr into error records, and under
+    # "Stop" PowerShell 5.1 makes the first one terminating. pip writes
+    # ordinary warnings to stderr, so that must not end the install.
+    $ErrorActionPreference = "Continue"
+    try {
+        & $Exe @Arguments 2>&1 | ForEach-Object {
+            $line = [string]$_
+            Write-Host $line
+            Write-Log $line
+        }
+        return $LASTEXITCODE
+    } finally {
+        $ErrorActionPreference = $previous
+    }
 }
 
 function Get-File {
@@ -150,12 +185,28 @@ function Expand-Zip {
 
 # winget and anything else installed mid-run lands on the PATH held in the
 # registry, not in the environment this process inherited at launch.
+#
+# Merged in, never assigned over: $env:Path holds process-scoped entries that
+# are in no registry value — uv's directory, anything the caller's shell set —
+# and overwriting it lost them for the rest of the run and for the app this
+# script goes on to launch.
 function Update-PathFromRegistry {
-    $parts = @(
+    $stored = @(
         [Environment]::GetEnvironmentVariable("Path", "Machine"),
         [Environment]::GetEnvironmentVariable("Path", "User")
     ) | Where-Object { $_ }
-    if ($parts) { $env:Path = ($parts -join ";") }
+    if (-not $stored) { return }
+
+    $merged = @($env:Path -split ";" | Where-Object { $_ })
+    $seen = @($merged | ForEach-Object { $_.TrimEnd("\") })
+    foreach ($entry in (($stored -join ";") -split ";")) {
+        if (-not $entry) { continue }
+        if ($seen -inotcontains $entry.TrimEnd("\")) {
+            $merged += $entry
+            $seen += $entry.TrimEnd("\")
+        }
+    }
+    $env:Path = $merged -join ";"
 }
 
 function Test-Winget {
@@ -228,10 +279,10 @@ function Install-Uv {
     }
 
     # uv's installer adds itself to the *stored* PATH, so look where it puts
-    # itself rather than trusting this process's environment.
+    # itself rather than trusting this process's environment. One prepend is
+    # enough now that Update-PathFromRegistry merges rather than assigns.
     $env:Path = (Join-Path $env:USERPROFILE ".local\bin") + ";" + $env:Path
     Update-PathFromRegistry
-    $env:Path = (Join-Path $env:USERPROFILE ".local\bin") + ";" + $env:Path
 
     $found = Get-Command uv -ErrorAction SilentlyContinue
     if ($found) { return $found.Source }
@@ -278,11 +329,20 @@ function Get-ProjectSource {
         return $ScriptRoot
     }
 
-    $zipUrl = "$($Repo.TrimEnd('/'))/archive/refs/heads/$Ref.zip"
+    # A clone URL ending in .git is a perfectly ordinary value for
+    # BEYONDMEETINGS_REPO — it was only ever pasted after git+ before — and
+    # GitHub's archive path 404s with the suffix left on.
+    $base = $Repo.TrimEnd('/')
+    if ($base.EndsWith(".git")) { $base = $base.Substring(0, $base.Length - 4) }
+    $zipUrl = "$base/archive/refs/heads/$Ref.zip"
+
     $scratch = Join-Path ([System.IO.Path]::GetTempPath()) `
         ("bm-src-" + [System.Guid]::NewGuid().ToString("N"))
     $unpacked = Join-Path $scratch "src"
     New-Item -ItemType Directory -Force -Path $scratch | Out-Null
+    # Remembered so it can be deleted once pip has read it. Tens of megabytes
+    # of zip and unpacked tree per run, otherwise left in %TEMP% forever.
+    $script:SourceScratch = $scratch
     $archive = Join-Path $scratch "source.zip"
 
     try {
@@ -341,12 +401,15 @@ if ($DryRun) {
     } elseif (Test-Winget) {
         Write-Host "Dry run: would install Python $PreferredVersion with winget."
     } else {
-        Write-Host "Dry run: no Python, no uv (-NoUv) and no winget — would stop here." `
-            -ForegroundColor Red
-        Write-Host "Details: $LogPath"
+        Fail "Dry run: no Python, no uv (-NoUv) and no winget — would stop here."
+        Fail "Details: $LogPath"
         exit 1
     }
-    if (-not $HaveGit) {
+    $localCheckout = $PSScriptRoot -and
+        (Test-Path (Join-Path $PSScriptRoot "pyproject.toml"))
+    if ($localCheckout) {
+        Write-Host "Dry run: would install from this checkout, fetching nothing."
+    } elseif (-not $HaveGit) {
         Write-Host "Dry run: git is absent, so the source would be downloaded as a zip."
     }
     exit 0
@@ -372,10 +435,10 @@ if (-not $Interpreter) {
 
     if (-not $UsingUv -and -not $Interpreter) {
         Write-Host ""
-        Write-Host "Could not find or install a Python $MinVersion+." -ForegroundColor Red
-        Write-Host "Install one from https://www.python.org/downloads/ (tick"
-        Write-Host "`"Add python.exe to PATH`"), then run this installer again."
-        Write-Host "Details: $LogPath"
+        Fail "Could not find or install a Python $MinVersion+."
+        Fail "Install one from https://www.python.org/downloads/ (tick"
+        Fail "`"Add python.exe to PATH`"), then run this installer again."
+        Fail "Details: $LogPath"
         exit 1
     }
 }
@@ -383,49 +446,65 @@ if (-not $Interpreter) {
 New-Item -ItemType Directory -Force -Path $InstallRoot, $BinDir | Out-Null
 
 if ($UsingUv) {
-    & $UvExe python install $PreferredVersion
-    if ($LASTEXITCODE -ne 0) {
+    if ((Invoke-Logged $UvExe @("python", "install", $PreferredVersion)) -ne 0) {
         Warn "uv could not install Python $PreferredVersion; trying $MinVersion."
-        & $UvExe python install $MinVersion
+        Invoke-Logged $UvExe @("python", "install", $MinVersion) | Out-Null
     }
     # --seed puts pip in the venv; without it the install below dies on
     # "No module named pip".
-    & $UvExe venv --seed --python $PreferredVersion $Venv
-    if ($LASTEXITCODE -ne 0) {
-        & $UvExe venv --seed --python $MinVersion $Venv
+    $built = Invoke-Logged $UvExe @(
+        "venv", "--seed", "--python", $PreferredVersion, $Venv)
+    if ($built -ne 0) {
+        Invoke-Logged $UvExe @("venv", "--seed", "--python", $MinVersion, $Venv) |
+            Out-Null
     }
 } else {
-    & $Interpreter.Exe @($Interpreter.Prefix + @("-m", "venv", $Venv))
+    Invoke-Logged $Interpreter.Exe @($Interpreter.Prefix + @("-m", "venv", $Venv)) |
+        Out-Null
 }
 
 if (-not (Test-Path $VenvPython)) {
     Write-Host ""
-    Write-Host "The environment at $Venv was not created. Nothing was installed." -ForegroundColor Red
-    Write-Host "Details: $LogPath"
+    Fail "The environment at $Venv was not created. Nothing was installed."
+    Fail "Details: $LogPath"
     exit 1
 }
 
 Say "Installing beyondMeetings..."
-& $VenvPython -m pip install --quiet --disable-pip-version-check --upgrade pip
+Invoke-Logged $VenvPython @(
+    "-m", "pip", "install", "--quiet", "--disable-pip-version-check",
+    "--upgrade", "pip") | Out-Null
 
 try {
     $SourceDir = Get-ProjectSource
 } catch {
     Write-Host ""
-    Write-Host $_.Exception.Message -ForegroundColor Red
-    Write-Host "Nothing was installed. Details: $LogPath"
+    Fail $_.Exception.Message
+    Fail "Nothing was installed. Details: $LogPath"
     exit 1
 }
 if ($SourceDir) {
-    & $VenvPython -m pip install --quiet --disable-pip-version-check "$SourceDir[desktop]"
+    $installed = Invoke-Logged $VenvPython @(
+        "-m", "pip", "install", "--quiet", "--disable-pip-version-check",
+        "$SourceDir[desktop]")
 } else {
-    & $VenvPython -m pip install --quiet --disable-pip-version-check `
-        "beyondmeetings[desktop] @ git+$Repo@$Ref"
+    # @$Ref only when one was asked for: the bare URL lets pip take the
+    # remote's default branch, which is what a fork on master needs.
+    $spec = if ($RefWasGiven) { "git+$Repo@$Ref" } else { "git+$Repo" }
+    $installed = Invoke-Logged $VenvPython @(
+        "-m", "pip", "install", "--quiet", "--disable-pip-version-check",
+        "beyondmeetings[desktop] @ $spec")
 }
-if ($LASTEXITCODE -ne 0) {
+
+# The downloaded source has served its purpose the moment pip has read it.
+if ($script:SourceScratch) {
+    Remove-Item -Recurse -Force $script:SourceScratch -ErrorAction SilentlyContinue
+}
+
+if ($installed -ne 0) {
     Write-Host ""
-    Write-Host "Installing the application failed. Nothing else was changed." -ForegroundColor Red
-    Write-Host "Details: $LogPath"
+    Fail "Installing the application failed. Nothing else was changed."
+    Fail "Details: $LogPath"
     exit 1
 }
 
@@ -448,11 +527,18 @@ Say "Installed the beyondmeetings command to $BinDir"
 # so no PATH edit is needed for it either.
 Say "Checking the other things a bare Windows is missing..."
 try {
-    & $VenvPython -m beyondmeetings.provision_windows
+    Invoke-Logged $VenvPython @("-m", "beyondmeetings.provision_windows") | Out-Null
 } catch {
     Warn "Could not check prerequisites: $($_.Exception.Message)"
     Warn "Run 'beyondmeetings doctor' to see what is missing."
 }
+
+# winget puts ffmpeg on the stored PATH, not on the one this process read at
+# launch, and the app started below inherits ours. Without this refresh a
+# winget-installed ffmpeg stayed invisible until the next sign-in and the
+# first transcription failed in resolve_ffmpeg(). The download route needs
+# nothing: it lands in $BinDir, which the app searches directly.
+Update-PathFromRegistry
 
 # Shell integration is convenience, never a prerequisite for recording, so a
 # failure here warns and carries on. doctor can repair it later.

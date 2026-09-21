@@ -374,8 +374,9 @@ shortcut, a `beyondmeetings` command shim, and opens the setup window.
 **Once the application itself is installed, nothing that follows can fail the
 run.** A prerequisite it could not fetch is reported and the install still
 succeeds; `beyondmeetings doctor` retries any of them later, using the same
-code the installer used. The whole run is logged to
-`%TEMP%\beyondmeetings-install.log` — that is the file to send if something
+code the installer used. The whole run — including the output of pip, uv and
+everything else it shells out to, and the reason for any failure — is logged
+to `%TEMP%\beyondmeetings-install.log`. That is the file to send if something
 still goes wrong. Pass `-NoLaunch` to install without opening the app.
 
 Capture uses WASAPI loopback for everyone else on the call and the default

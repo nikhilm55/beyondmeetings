@@ -14,6 +14,7 @@ from pathlib import Path
 
 from beyondmeetings.provision_windows import (
     FFMPEG_URL,
+    RUN_TIMEOUT,
     Outcome,
     bin_dir,
     ensure_ffmpeg,
@@ -21,6 +22,7 @@ from beyondmeetings.provision_windows import (
     extract_ffmpeg,
     main,
     provision,
+    run,
     winget_install,
 )
 
@@ -310,3 +312,31 @@ def test_the_bin_directory_honours_the_override(monkeypatch, tmp_path):
     monkeypatch.setenv("BEYONDMEETINGS_BIN", str(tmp_path / "elsewhere"))
 
     assert bin_dir() == tmp_path / "elsewhere"
+
+
+def test_a_hanging_command_is_a_failure_not_a_hang(monkeypatch):
+    """Past install.ps1's point of no return with output discarded, a winget
+    that sits on a prompt would otherwise leave one progress line forever."""
+    import subprocess
+
+    seen = {}
+
+    def fake_run(args, **kwargs):
+        seen.update(kwargs)
+        raise subprocess.TimeoutExpired(args, kwargs.get("timeout"))
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+
+    assert run(["winget", "install", "X"]) == 1
+    assert seen["timeout"] == RUN_TIMEOUT
+
+
+def test_a_command_that_cannot_be_launched_is_a_failure(monkeypatch):
+    import subprocess
+
+    monkeypatch.setattr(
+        subprocess, "run",
+        lambda args, **kw: (_ for _ in ()).throw(FileNotFoundError("winget")),
+    )
+
+    assert run(["winget"]) == 1

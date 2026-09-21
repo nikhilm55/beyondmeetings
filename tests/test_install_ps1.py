@@ -62,11 +62,15 @@ def test_the_source_can_be_fetched_without_git():
 
 
 def test_git_is_only_ever_a_fallback():
-    """The one git+ install sits in the else branch, after the zip route."""
-    assert SCRIPT.count("git+$Repo") == 1
+    """One line builds a git spec, and it sits in the else branch."""
+    building = [
+        line for line in SCRIPT.splitlines()
+        if "git+" in line and not line.lstrip().startswith("#")
+    ]
+    assert len(building) == 1, building
 
     region = SCRIPT.split("if ($SourceDir) {", 1)[1]
-    assert region.index("} else {") < region.index("git+$Repo")
+    assert region.index("} else {") < region.index("git+")
 
 
 def test_a_missing_source_and_missing_git_says_so_in_one_sentence():
@@ -84,7 +88,7 @@ def test_python_has_three_routes_not_one():
 
 def test_the_runtime_prerequisites_are_provisioned():
     """ffmpeg and WebView2, through the app's own code so doctor matches."""
-    assert "-m beyondmeetings.provision_windows" in SCRIPT
+    assert "beyondmeetings.provision_windows" in SCRIPT
 
 
 def test_the_progress_bar_is_silenced_before_any_download():
@@ -103,13 +107,11 @@ def test_tls12_is_forced_before_any_download():
 def test_every_early_exit_points_at_the_log():
     """A user on a clean machine has nothing else to send back."""
     before = SCRIPT.split(POINT_OF_NO_RETURN, 1)[0]
-    failures = [
-        block for block in before.split("exit 1")[:-1]
-    ]
-    assert failures, "the installer has no failure paths left to check"
-    for block in failures:
-        tail = block[-500:]
-        assert "$LogPath" in tail, f"an exit 1 with no log pointer:\n{tail}"
+    reasons = _line_before_each("exit 1", before)
+
+    assert reasons, "the installer has no failure paths left to check"
+    for reason in reasons:
+        assert "$LogPath" in reason, f"an exit 1 with no log pointer: {reason}"
 
 
 def test_nothing_after_a_successful_install_can_fail_the_run():
@@ -275,3 +277,112 @@ def test_a_dry_run_reports_before_anything_is_fetched():
 
     # ...and the branch that would have fetched is only reachable afterwards.
     assert SCRIPT.index("if (-not $Interpreter) {\n    if (-not $NoUv)") > dry_run
+
+
+# --- what the first review of this installer found --------------------------
+
+
+def _line_before_each(marker: str, text: str) -> list[str]:
+    """The nearest meaningful line above each `marker`, braces skipped."""
+    found = []
+    for block in text.split(marker)[:-1]:
+        for line in reversed(block.splitlines()):
+            stripped = line.strip()
+            if stripped and stripped not in {"{", "}"}:
+                found.append(stripped)
+                break
+    return found
+
+
+def test_every_terminal_failure_goes_through_Fail():
+    """Fail() writes to the log; Write-Host does not. Every reason an install
+    stopped used to exist only on a screen the user had already closed."""
+    before = SCRIPT.split(POINT_OF_NO_RETURN, 1)[0]
+    reasons = _line_before_each("exit 1", before)
+
+    assert reasons, "the installer has no failure paths left to check"
+    for reason in reasons:
+        assert reason.startswith("Fail "), f"a failure that skips the log: {reason}"
+
+
+def test_the_commands_that_can_fail_are_logged():
+    """pip's output is the reason for almost every failed install."""
+    for command in ("pip", "install", "venv"):
+        assert command in SCRIPT
+    assert "function Invoke-Logged" in SCRIPT
+    # Nothing that can fail the install may bypass it.
+    assert "& $VenvPython -m pip install" not in SCRIPT
+
+
+def test_the_path_is_refreshed_after_provisioning():
+    """winget puts ffmpeg on the stored PATH, not on this process's, and the
+    app launched below inherits ours."""
+    provision = SCRIPT.index("beyondmeetings.provision_windows")
+    launch = SCRIPT.index("app --setup")
+    refresh = SCRIPT.index("Update-PathFromRegistry", provision)
+
+    assert provision < refresh < launch
+
+
+def test_the_path_refresh_merges_rather_than_assigns():
+    body = SCRIPT.split("function Update-PathFromRegistry {", 1)[1].split("\n}", 1)[0]
+    assert '$env:Path = $merged -join ";"' in body
+    assert '$env:Path = ($parts -join ";")' not in body
+
+
+def test_a_repo_url_ending_in_dot_git_still_yields_an_archive_url():
+    assert '.EndsWith(".git")' in SCRIPT
+
+
+def test_the_git_fallback_only_pins_a_ref_when_one_was_given():
+    """Appending @main pins a fork whose default branch is master or dev to a
+    branch it does not have."""
+    assert "$RefWasGiven" in SCRIPT
+    spec = SCRIPT.split("$spec = ", 1)[1].split("\n", 1)[0]
+    assert '$RefWasGiven' in spec and 'git+$Repo"' in spec
+
+
+def test_the_downloaded_source_is_cleaned_up():
+    """Tens of megabytes of zip and unpacked tree per run, otherwise kept."""
+    assert "$script:SourceScratch = $scratch" in SCRIPT
+    removal = SCRIPT.index("Remove-Item -Recurse -Force $script:SourceScratch")
+    assert removal > SCRIPT.index("$installed = Invoke-Logged")
+
+
+def test_the_dry_run_does_not_promise_a_download_from_inside_a_checkout():
+    assert "would install from this checkout, fetching nothing" in SCRIPT
+
+
+def test_the_uninstaller_survives_an_empty_localappdata():
+    """install.ps1 grew a fallback; the uninstaller kept the bug, which made
+    the program unremovable by its own script in that same session."""
+    text = UNINSTALL.read_text(encoding="utf-8")
+    assert "$LocalAppData = if ($env:LOCALAPPDATA)" in text
+    assert '$env:LOCALAPPDATA "' not in text
+
+
+@pytest.mark.skipif(shutil.which("pwsh") is None, reason="PowerShell not installed")
+def test_the_path_merge_keeps_process_only_entries(tmp_path):
+    """Exercised, not grepped: the old version assigned the registry value
+    over $env:Path, dropping uv's directory and anything the caller set."""
+    harness = tmp_path / "path.ps1"
+    harness.write_text(
+        HARNESS.replace(
+            '$result = Get-ProjectSource -ScriptRoot $ScriptRoot\n'
+            'Write-Output "RESULT=$result"',
+            '$env:Path = "/only-in-this-process;" + $env:Path\n'
+            'Update-PathFromRegistry\n'
+            'Write-Output "RESULT=$env:Path"',
+        ),
+        encoding="utf-8",
+    )
+
+    result = subprocess.run(
+        ["pwsh", "-NoProfile", "-File", str(harness),
+         "-Installer", str(INSTALL), "-RepoBase", "http://127.0.0.1:1/unused"],
+        capture_output=True, text=True,
+    )
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    line = [x for x in result.stdout.splitlines() if x.startswith("RESULT=")][-1]
+    assert "/only-in-this-process" in line

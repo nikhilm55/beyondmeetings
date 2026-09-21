@@ -68,7 +68,19 @@ class WebView2Check(Check):
         outcome = ensure_webview2()
         if not outcome.satisfied:
             return CheckResult(status="missing", detail=outcome.detail)
-        return self.detect()
+
+        result = self.detect()
+        if result.status == "ok":
+            return result
+        # The Evergreen bootstrapper exits 0 as soon as it has handed off, so
+        # the registry can still be empty a moment later. Reporting "Not
+        # installed" straight after a fix that worked is the wrong answer;
+        # FfmpegCheck says the same thing about its winget route.
+        return CheckResult(
+            status="ok",
+            detail=f"{outcome.detail} — restart beyondMeetings if the window "
+                   "still does not open.",
+        )
 
 
 class StartMenuShortcutCheck(Check):
