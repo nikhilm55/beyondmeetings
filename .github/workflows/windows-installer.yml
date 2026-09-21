@@ -174,11 +174,24 @@ jobs:
           $uninstaller = Get-ChildItem (Join-Path $root "app") -Filter "unins*.exe" |
               Select-Object -First 1
           if (-not $uninstaller) { throw "no uninstaller was registered" }
+          $log = "$PWD\inno-uninstall.log"
           $run = Start-Process -FilePath $uninstaller.FullName -Wait -PassThru `
-              -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART'
-          if ($run.ExitCode -ne 0) { throw "the uninstaller exited $($run.ExitCode)" }
+              -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', "/LOG=$log"
 
-          if (Test-Path (Join-Path $root "app")) { throw "the app directory survived" }
+          # unins000.exe copies itself to %TEMP% and re-launches from there, so
+          # the process Start-Process waited on can return before the copy has
+          # finished — and its exit code is not the uninstall's. Judge the
+          # outcome instead, giving the second stage time to complete.
+          $app = Join-Path $root "app"
+          $deadline = (Get-Date).AddSeconds(90)
+          while ((Test-Path $app) -and (Get-Date) -lt $deadline) { Start-Sleep 1 }
+
+          Write-Host "uninstaller process exited $($run.ExitCode)"
+          if (Test-Path $log) { Get-Content $log | Select-Object -Last 25 }
+          if (Test-Path $app) {
+              Get-ChildItem -Recurse $app | Select-Object -First 20 FullName
+              throw "the app directory survived"
+          }
           if (Test-Path (Join-Path $root "bin\ffmpeg.exe")) { throw "ffmpeg survived" }
           if (-not (Test-Path (Join-Path $recordings "keep-me.wav"))) {
               throw "THE UNINSTALLER DELETED THE USER'S RECORDINGS"

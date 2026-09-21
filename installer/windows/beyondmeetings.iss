@@ -139,12 +139,13 @@ Type: dirifempty; Name: "{localappdata}\{#AppName}\bin"
 
 [Code]
 
-// Stop anything running out of the install directory.
+// Stop the application, so its files are not locked.
 //
 // An upgrade cannot overwrite a locked python .dll, and an uninstall cannot
-// delete one. Scoping the match to executables inside the install directory
-// is what makes this safe: the user's own Python, and anyone else's, is left
-// alone.
+// delete one. The match is scoped to the two subdirectories that hold our
+// interpreters, so the user's own Python is left alone — and deliberately
+// not to the install directory as a whole, because unins000.exe lives at its
+// root and a kill that broad lets the uninstaller shoot itself mid-run.
 //
 // Note for editors: every comment in this section is a line comment. Pascal
 // block comments do not nest, in either spelling, so writing an Inno
@@ -159,9 +160,10 @@ begin
   Command :=
     '-NoProfile -NonInteractive -ExecutionPolicy Bypass -Command ' +
     '"$ErrorActionPreference = ''SilentlyContinue''; ' +
-    '$root = ''' + ExpandConstant('{app}') + '''; ' +
-    'Get-Process | Where-Object { $_.Path -and ' +
-    '$_.Path.StartsWith($root, ''OrdinalIgnoreCase'') } | ' +
+    '$roots = @(''' + ExpandConstant('{app}\runtime') + ''', ''' +
+    ExpandConstant('{app}\venv') + '''); ' +
+    'Get-Process | Where-Object { $p = $_.Path; $p -and ' +
+    '($roots | Where-Object { $p.StartsWith($_, ''OrdinalIgnoreCase'') }) } | ' +
     'Stop-Process -Force"';
   Exec('powershell.exe', Command, '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
 end;

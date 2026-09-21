@@ -341,7 +341,31 @@ def _code_outside_strings(iss: str) -> str:
     and a PowerShell script block both contain them — so any check for stray
     braces has to look at the code around the strings, not at the text.
     """
-    return re.sub(r"'(?:[^']|'')*'", "''", _section(iss, "Code"))
+    # A small lexer rather than a regex: an apostrophe inside a `//` comment
+    # ("the user's own Python") is not a string, and a `//` inside a string
+    # ('https://...') is not a comment. Each regex got one of those wrong.
+    code = _section(iss, "Code")
+    kept, i = [], 0
+    while i < len(code):
+        if code.startswith("//", i):
+            end = code.find("\n", i)
+            i = len(code) if end < 0 else end
+            continue
+        if code[i] == "'":
+            j = i + 1
+            while j < len(code):
+                if code.startswith("''", j):
+                    j += 2
+                    continue
+                if code[j] == "'":
+                    break
+                j += 1
+            kept.append("''")
+            i = j + 1
+            continue
+        kept.append(code[i])
+        i += 1
+    return "".join(kept)
 
 
 def test_the_code_section_uses_only_line_comments(iss):
@@ -376,6 +400,19 @@ def test_the_comment_guard_actually_detects_the_bug(comment):
     bare = _code_outside_strings(f"[Code]\n{comment}\n")
 
     assert "(*" in bare or "{" in bare
+
+
+def test_the_guard_reads_an_apostrophe_in_a_comment_as_prose():
+    """It did not, once, and swallowed the rest of the section as a string."""
+    sample = "[Code]\n// the user's own Python\nX := ExpandConstant('{app}');\n"
+
+    assert "{" not in _code_outside_strings(sample)
+
+
+def test_the_guard_still_sees_a_block_comment_after_a_line_comment():
+    sample = "[Code]\n// it's fine\n{ but this is not }\n"
+
+    assert "{" in _code_outside_strings(sample)
 
 
 def test_the_guard_does_not_trip_on_braces_inside_a_string():
@@ -688,3 +725,26 @@ def test_the_licence_is_found_whatever_the_archive_calls_it(tmp_path):
 
 def test_the_installer_ships_the_licence_beside_the_binary(iss):
     assert "ffmpeg-LICENSE.txt" in iss
+
+
+def test_stopping_the_app_cannot_stop_the_uninstaller(iss):
+    """unins000.exe sits at the root of the install directory. Killing
+    everything under that root made the uninstaller kill itself halfway
+    through; only the interpreter directories may be targeted."""
+    stop = _section(iss, "Code").split("procedure StopRunningApp", 1)[1]
+    stop = stop.split("end;", 1)[0]
+
+    assert r"{app}\runtime" in stop and r"{app}\venv" in stop
+    assert "ExpandConstant('{app}')" not in stop, "the whole install directory"
+
+
+def test_the_uninstall_is_judged_by_its_outcome():
+    """The uninstaller re-launches itself from %TEMP%, so the exit code of
+    the process CI waited on is not the uninstall's result."""
+    workflow = (
+        ROOT / ".github" / "workflows" / "windows-installer.yml"
+    ).read_text(encoding="utf-8")
+    step = workflow.split("Uninstalling keeps the user's meetings", 1)[1]
+
+    assert "/LOG=" in step
+    assert "$run.ExitCode -ne 0" not in step
